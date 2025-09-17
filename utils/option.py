@@ -41,10 +41,10 @@ def get_args_parser():
     ## Model + optim method + data aug + loss + post-hoc
     parser.add_argument('--model-name', default='resnet50', type=str, help='Models name to use')
     parser.add_argument('--activation', default='relu', type=str,choices = ['relu', 'gelu', 'lrelu'], help='Which activation to use')
-    parser.add_argument('--resume', default='./pretrained_model/resnet50-0676ba61.pth', type=str, help='resume path')
+    parser.add_argument('--resume', default=None, type=str, help='resume path')
     
     
-    parser.add_argument('--deit-path', default = '/data9022/pretrained_model/DEIT/deit_base_patch16_224-b5f2ef4d.pth', type=str, help='Official DeiT checkpoints')
+    parser.add_argument('--deit-path', default = '/data/pretrained_model/DEIT/deit_base_patch16_224-b5f2ef4d.pth', type=str, help='Official DeiT checkpoints')
     parser.add_argument('--optim-name', default='fsam', type=str, choices=['baseline', 'sam', 'swa', 'fmfp', 'fsam', 'fmfpfsam', 'csgd', 'csam', 'cfsam'],
                         help='Supported methods for optimization process')
     
@@ -60,7 +60,7 @@ def get_args_parser():
 
     ## cosine classifier
     parser.add_argument('--use-cosine', action='store_true', default=False, help='whether use cosine classifier ')
-    parser.add_argument('--cos-temp', type=int, default=8, help='temperature for scaling cosine similarity')
+    parser.add_argument('--cos-temp', type=int, default=64, help='temperature for scaling cosine similarity')
     
 
     ## fine-tuning

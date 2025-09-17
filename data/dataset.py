@@ -10,6 +10,7 @@ import utils.pixmix_utils as pixmix_utils
 from copy import deepcopy
 from torch.utils.data.sampler import BatchSampler
 from torch.utils.data.distributed import DistributedSampler
+from torchvision.transforms import InterpolationMode
 from data.sampler import InfiniteSampler
 
 def worker_init_reset_seed(worker_id):
@@ -179,14 +180,14 @@ def get_loader(args, dataset, train_dir, val_dir, test_dir, batch_size, imb_fact
 
     # ResNet50
     train_aug_list = [
-        torchvision.transforms.Resize(256),
+        torchvision.transforms.Resize(256, interpolation = InterpolationMode.BILINEAR),
         torchvision.transforms.CenterCrop(224),
-        torchvision.transforms.RandomHorizontalFlip(),
+        torchvision.transforms.RandomHorizontalFlip(0.5),
         # torchvision.transforms.ToTensor(),
         # torchvision.transforms.Normalize(norm_mean, norm_std)
         ] 
     test_aug_list = [
-        torchvision.transforms.Resize(256),
+        torchvision.transforms.Resize(256, interpolation = InterpolationMode.BILINEAR),
         torchvision.transforms.CenterCrop(224),
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize(norm_mean, norm_std)]

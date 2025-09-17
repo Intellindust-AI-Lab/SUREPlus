@@ -83,7 +83,7 @@ def main(proc_idx, args):
         net = net.to(rank)
         # multi GPU support
         net = DDP(net, device_ids=[rank], output_device=rank, broadcast_buffers=False, find_unused_parameters=True)
-        net_ema = utils.ema.ModelEMA(net)
+        
         # print(net)
         if args.resume:
             if args.use_cosine: 
@@ -93,6 +93,8 @@ def main(proc_idx, args):
             if logger :logger.info("Successfully Loaded checkpoints")
             if args.optim_name == 'fmfp' or args.optim_name == 'swa':
                 net = AveragedModel(net)
+                
+        net_ema = utils.ema.ModelEMA(net)
         optimizer, cos_scheduler, swa_model, swa_scheduler = optim.get_optimizer_scheduler(args.model_name,
                                                                                         args.optim_name,
                                                                                         net,

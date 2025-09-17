@@ -57,7 +57,7 @@ def get_model(model_name, nb_cls, logger, args):
         # checkpoint = torch.load('/data9022/pretrained_model/FastViT/fastvit_sa24.pth.tar')
         # net.load_state_dict(checkpoint['state_dict'])
 
-    elif model_name == "deit":
+    elif model_name.startswith("deit"):
         if 'base_patch16_224' in args.deit_path : 
             net = timm.create_model('deit_base_patch16_224', checkpoint_path=args.deit_path).cuda()
         elif 'base_patch16_384' in args.deit_path : 

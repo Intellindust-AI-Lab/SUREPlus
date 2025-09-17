@@ -1,7 +1,8 @@
 ## Baseline
 python3 main.py \
---gpu 4 5 6 7 \
+--gpu 0 1 2 3  \
 --nb-run 1 \
+--batch-size 64 \
 --model-name resnet50 \
 --optim-name baseline \
 --save-dir ./ResNet50-ImageNet1k/CE \
