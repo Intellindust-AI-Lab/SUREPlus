@@ -1,6 +1,6 @@
 ## Ours
 python3 main.py \
---gpu 2 3 6 7 8 4 \
+--gpu 0 1 9 \
 --nb-run 1 \
 --lr 0.0001 \
 --weight-decay 0.00005 \

@@ -69,13 +69,14 @@ def get_optimizer_scheduler(model_name,
     #                             nesterov=False)    
     
     ## convmixer uses adamw optimzer while cnn backbones uses sgd
-    if model_name in ["convmixer", "vit_cifar" ] : # "FastViT-SA24"
+    if model_name in ["convmixer", "vit_cifar", "deit_base_patch16_224","dinov3_l16" ] : # "FastViT-SA24"
         if optim_name in ['sam', 'fmfp'] : 
             optimizer = sam_adamw
         elif optim_name in ['fsam', 'fmfpfsam'] : 
             optimizer = fsam_adamw
         else :
             optimizer = adamw_optimizer
+        print("-----Using Adamw-----")
             
     else: 
         if optim_name in ['sam', 'fmfp'] : 

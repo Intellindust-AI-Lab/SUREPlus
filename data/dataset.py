@@ -10,7 +10,8 @@ import utils.pixmix_utils as pixmix_utils
 from copy import deepcopy
 from torch.utils.data.sampler import BatchSampler
 from torch.utils.data.distributed import DistributedSampler
-from torchvision.transforms import InterpolationMode
+from torchvision.transforms import v2
+from torchvision.transforms.functional import InterpolationMode
 from data.sampler import InfiniteSampler
 
 def worker_init_reset_seed(worker_id):
@@ -210,8 +211,8 @@ def get_loader(args, dataset, train_dir, val_dir, test_dir, batch_size, imb_fact
     # Normal
     # train_loader = TrainDataLoader(train_dir, transform_train, batch_size, is_train=True, dataset_type=dataset, imb_factor=imb_factor)
 
-    val_loader = TestDataLoader(val_dir, transform_test, batch_size, dataset_type=dataset, args=args)
-    test_loader = TestDataLoader(test_dir, transform_test, batch_size, dataset_type=dataset, args=args)
+    val_loader = TestDataLoader(val_dir, transform_test, 16, dataset_type=dataset, args=args)
+    test_loader = TestDataLoader(test_dir, transform_test, 16, dataset_type=dataset, args=args)
 
     return train_loader, val_loader, test_loader, nb_cls
 

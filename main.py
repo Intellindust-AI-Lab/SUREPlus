@@ -95,6 +95,10 @@ def main(proc_idx, args):
                 net = AveragedModel(net)
                 
         net_ema = utils.ema.ModelEMA(net)
+        for param in net.module.parameters():
+            param.requires_grad = False
+        for param in net.module.head.parameters():
+            param.requires_grad = True
         optimizer, cos_scheduler, swa_model, swa_scheduler = optim.get_optimizer_scheduler(args.model_name,
                                                                                         args.optim_name,
                                                                                         net,
@@ -112,6 +116,21 @@ def main(proc_idx, args):
 
         # start Train
         for epoch in range(1, args.epochs + 2):
+            # Unfreeze
+            if epoch == 2:  
+                for param in net.module.parameters():
+                    param.requires_grad = True
+                optimizer, cos_scheduler, swa_model, swa_scheduler = optim.get_optimizer_scheduler(args.model_name,
+                                                                                                args.optim_name,
+                                                                                                net,
+                                                                                                args.lr,
+                                                                                                args.momentum,
+                                                                                                args.weight_decay,
+                                                                                                max_epoch_cos=args.epochs,
+                                                                                                swa_lr=args.swa_lr,
+                                                                                                args=args,
+                                                                                                train_loader=train_loader)  
+                    
             train.train(train_loader, net, net_ema, optimizer, epoch, correct_log, logger, writer, cos_scheduler, args)
 
             if args.optim_name in ['swa', 'fmfp'] :
@@ -198,6 +217,7 @@ def main(proc_idx, args):
                     logger.info(msg)
                     best_acc = acc
                     torch.save(net.state_dict(), os.path.join(save_path, f'best_acc_net_orig_{r+1}.pth'))
+                # torch.save(net.state_dict(), os.path.join(save_path, f'epoch{epoch}_net_orig_{r+1}.pth'))
 
                 # Track best accuracy for EMA model if enabled
                 if net_ema is not None and res_ema['Acc.'] > best_acc_ema:
@@ -206,12 +226,14 @@ def main(proc_idx, args):
                     logger.info(msg)
                     best_acc_ema = acc_ema
                     torch.save(net_ema.ema.state_dict(), os.path.join(save_path, f'best_acc_net_ema_{r+1}.pth'))
+                # torch.save(net_ema.ema.state_dict(), os.path.join(save_path, f'epoch{epoch}_net_ema_{r+1}.pth'))
 
                 # Optionally save SWA model if it outperforms
                 if args.optim_name in ['swa', 'fmfp', 'fmfpfsam'] and epoch > args.swa_epoch_start and res['Acc.'] > best_acc:
                     logger.info(f'SWA Model Accuracy improved from {best_acc:.2f} to {res["Acc."]:.2f}!!!')
                     best_acc = res['Acc.']
                     torch.save(swa_model.state_dict(), os.path.join(save_path, f'best_acc_net_swa_{r+1}.pth'))
+                # torch.save(swa_model.state_dict(), os.path.join(save_path, f'epoch{epoch}_net_swa_{r+1}.pth'))
         synchronize()
 
 

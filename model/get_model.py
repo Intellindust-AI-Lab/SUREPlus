@@ -56,6 +56,15 @@ def get_model(model_name, nb_cls, logger, args):
         net = timm.create_model('fastvit_sa24.apple_in1k',checkpoint_path='/data/pretrained_model/FastViT/fastvit_sa24.bin').cuda()
         # checkpoint = torch.load('/data9022/pretrained_model/FastViT/fastvit_sa24.pth.tar')
         # net.load_state_dict(checkpoint['state_dict'])
+    elif model_name =="dinov3_l16":
+        net = torch.hub.load(args.dinov3_repo, 'dinov3_vitl16', source='local', weights=args.dinov3_path)
+         # Remove the original classification head
+        if args.use_cosine:
+            # Cosine classifier (e.g. for open-set / OOD tasks)
+            net.head = model.classifier.Classifier(1024, nb_cls, args.cos_temp).cuda()
+        else:
+            # Standard linear classifier
+            net.head = torch.nn.Linear(1024, nb_cls).cuda()
 
     elif model_name.startswith("deit"):
         if 'base_patch16_224' in args.deit_path : 

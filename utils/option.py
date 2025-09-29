@@ -6,7 +6,7 @@ def get_args_parser():
                                      add_help=True,
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument('--epochs', default=30, type=int, help='Total number of training epochs ')
+    parser.add_argument('--epochs', default=20, type=int, help='Total number of training epochs ')
     parser.add_argument('--batch-size', default=256, type=int, help='Batch size')
     parser.add_argument('--train-size', default=224, type=int, help='train size')
     
@@ -43,8 +43,9 @@ def get_args_parser():
     parser.add_argument('--activation', default='relu', type=str,choices = ['relu', 'gelu', 'lrelu'], help='Which activation to use')
     parser.add_argument('--resume', default=None, type=str, help='resume path')
     
-    
-    parser.add_argument('--deit-path', default = '/data/pretrained_model/DEIT/deit_base_patch16_224-b5f2ef4d.pth', type=str, help='Official DeiT checkpoints')
+    parser.add_argument('--dinov3-repo', default = '/data1032/liyang/git/dinov3', type=str, help='Official Dino V3 Repo')
+    parser.add_argument('--dinov3-path', default = '/data/dinov3/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth', type=str, help='Official Dino V3 Repo')
+    parser.add_argument('--deit-path', default = '/data9022/pretrained_model/DEIT/deit_base_patch16_224-b5f2ef4d.pth', type=str, help='Official DeiT checkpoints')
     parser.add_argument('--optim-name', default='fsam', type=str, choices=['baseline', 'sam', 'swa', 'fmfp', 'fsam', 'fmfpfsam', 'csgd', 'csam', 'cfsam'],
                         help='Supported methods for optimization process')
     
