@@ -1,6 +1,3 @@
----
-
-````markdown
 # 🧠 DINOv3 Training Framework on ImageNet-1K
 
 This repository provides a **training framework for DINOv3 (ViT-L/16 distilled)** on **ImageNet-1K**, with configurations aligned to the [**OpenOOD**](https://github.com/LIYangggggg/SURE-v2/tree/openood) benchmark.  
@@ -8,7 +5,7 @@ It is designed for research on **OOD detection**, **robust classification**, and
 
 > ⚠️ **Note:** This repository focuses on **training only**. For evaluation and testing, please use the modified [OpenOOD](https://github.com/LIYangggggg/SURE-v2/tree/openood) framework.
 
----
+
 
 ## 📦 Environment Setup
 
