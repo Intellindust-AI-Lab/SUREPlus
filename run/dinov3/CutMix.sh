@@ -8,12 +8,13 @@ python3 main.py \
 --epochs 10 \
 --model-name dinov3_l16 \
 --optim-name baseline \
+--cutmix-weight 1.0 \
 --pixmix-weight 0.0 \
 --mixup-weight 0.0 \
 --mixup-beta 10.0 \
 --dinov3-repo /data1032/liyang/git/dinov3 \
 --dinov3-path /data/dinov3/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth \
---save-dir ./DinoV3-L16-ImageNet1k/ours_1e-5_adamw \
+--save-dir ./DinoV3-L16-ImageNet1k/CutMix \
 ImageNet1k \
 --train-dir /data6022/Inet1K/train \
 --val-dir imagenet/val

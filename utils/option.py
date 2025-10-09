@@ -30,6 +30,10 @@ def get_args_parser():
     parser.add_argument('--pixmix-weight', default=0.0, type=float, help='weight of PixMix')
     parser.add_argument('--pixmix-path', default='/data6022/PixMixSet/fractals_and_fvis/first_layers_resized256_onevis/', type=str, help='path of PixMix dataset')
 
+    ## AugMix
+    parser.add_argument('--augmix-weight', default=0.0, type=float, help='weight of AugMix')
+
+
     ## nb of run + print freq
     parser.add_argument('--nb-run', default=1, type=int, help='Run n times, in order to compute std')
 
@@ -74,6 +78,7 @@ def get_args_parser():
     parser.add_argument('--t', default=1.0, type=float, help='When you set re-weighting type to [exp], you can set the temperature by changing t')
 
     parser.add_argument('--crl-weight', default=0.0, type=float, help='CRL loss weight')
+    parser.add_argument('--orig-mixup', action='store_true', default=False, help='whether use original Mixup')
     parser.add_argument('--mixup-weight', default=0.0, type=float, help='Mixup loss weight')
     parser.add_argument('--gpu', default=[2,3,4,5], type=int, nargs='+', help='GPU ids to use')
 

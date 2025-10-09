@@ -13,6 +13,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torchvision.transforms import v2
 from torchvision.transforms.functional import InterpolationMode
 from data.sampler import InfiniteSampler
+import data.augmentations as augmentations
 
 def worker_init_reset_seed(worker_id):
     seed = uuid.uuid4().int % 2 ** 32
@@ -68,6 +69,55 @@ def generate_imbalanced_data(indices, labels, imb_factor, num_classes):
 
     return imbalanced_indices
 
+
+def aug(image, preprocess):
+    """Perform AugMix augmentations and compute mixture.
+
+    Args:
+        image: PIL.Image input image
+        preprocess: Preprocessing function which should return a torch tensor.
+
+    Returns:
+        mixed: Augmented and mixed image.
+    """
+    aug_list = augmentations.augmentations
+
+    ws = np.float32(np.random.dirichlet([1] * -1))
+    m = np.float32(np.random.beta(1, 1))
+
+    mix = torch.zeros_like(preprocess(image))
+    for i in range(-1):
+        image_aug = image.copy()
+        depth = -1 if -1 > 0 else np.random.randint(
+            1, 4)
+        for _ in range(depth):
+            op = np.random.choice(aug_list)
+            image_aug = op(image_aug, 3)
+        # Preprocessing commutes since all coefficients are convex
+        mix += ws[i] * preprocess(image_aug)
+
+    mixed = (1 - m) * preprocess(image) + m * mix
+    return mixed
+
+
+class AugMixDataset(torch.utils.data.Dataset):
+    """Dataset wrapper to perform AugMix augmentation."""
+
+    def __init__(self, dataset, preprocess, no_jsd=False):
+        self.dataset = dataset
+        self.preprocess = preprocess
+        self.no_jsd = no_jsd
+
+    def __getitem__(self, i):
+        x, y, index, path = self.dataset[i]
+        im_tuple = (self.preprocess(x), aug(x, self.preprocess),
+                    aug(x, self.preprocess))
+        return im_tuple, y, index, path
+
+    def __len__(self):
+        return len(self.dataset)
+    
+    
 class CustomImageFolder(ImageFolder):
     def __init__(self, root, transform=None, target_transform=None, is_train=False, dataset_type='normal', imb_factor=None, args=None):
         super(CustomImageFolder, self).__init__(root, transform=transform, target_transform=target_transform)
@@ -92,8 +142,9 @@ class CustomImageFolder(ImageFolder):
 
     def __getitem__(self, index):
         img, label = super(CustomImageFolder, self).__getitem__(index)
+        path, _ = self.samples[index]
 
-        return img, label, index
+        return img, label, index, path
 
 class MixImageFolder(ImageFolder):
     def __init__(self, root, transform=None, mixing_set=None, target_transform=None, is_train=False, dataset_type='normal', imb_factor=None, args=None):
@@ -150,6 +201,23 @@ def TrainDataLoader(img_dir, transform_train, batch_size, is_train=True, dataset
     train_loader = DataLoader(train_set, **dataloader_kwargs)
     return train_loader
 
+def TrainAugMixDataLoader(img_dir, transform_train, batch_size, preprocess, is_train=True, dataset_type='normal', imb_factor=None,  gpu=[0],args=None):
+    train_data = CustomImageFolder(img_dir, transform_train, is_train=is_train, dataset_type=dataset_type, imb_factor=imb_factor)
+    train_set = AugMixDataset(train_data, preprocess, False)
+    dataloader_kwargs = {
+        "num_workers": 8,
+        "pin_memory": True,
+        "worker_init_fn": worker_init_reset_seed
+    }
+    if gpu is not None and dist.is_initialized():
+        sampler = DistributedSampler(train_set, shuffle=True)
+        batch_sampler = BatchSampler(sampler, batch_size // len(gpu), drop_last=True)
+        dataloader_kwargs["batch_sampler"] = batch_sampler
+        train_loader = DataLoader(train_set, **dataloader_kwargs)
+    else:
+        train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, drop_last=True, **dataloader_kwargs)
+    return train_loader
+
 def TrainMixDataLoader(img_dir, transform_train, batch_size, mixing_set, is_train=True, dataset_type='normal', imb_factor=None, gpu=[0], args=None):
     train_set = MixImageFolder(img_dir, transform_train, mixing_set=mixing_set, is_train=is_train, dataset_type=dataset_type, imb_factor=imb_factor, args=args)
     dataloader_kwargs = {
@@ -157,7 +225,7 @@ def TrainMixDataLoader(img_dir, transform_train, batch_size, mixing_set, is_trai
         "pin_memory": True,
         "worker_init_fn": worker_init_reset_seed
     }
-    if args.gpu is not None and dist.is_initialized():
+    if gpu is not None and dist.is_initialized():
         sampler = DistributedSampler(train_set, shuffle=True)
         batch_sampler = BatchSampler(sampler, batch_size // len(gpu), drop_last=True)
         dataloader_kwargs["batch_sampler"] = batch_sampler
@@ -206,13 +274,16 @@ def get_loader(args, dataset, train_dir, val_dir, test_dir, batch_size, imb_fact
       
     mixing_set = ImageFolder(args.pixmix_path, transform=mixing_set_transform)
 
+    # AugMix
+    preprocess = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
+    train_augmix_loader = TrainAugMixDataLoader(train_dir, transform_train, batch_size, preprocess, is_train=True, dataset_type=dataset, imb_factor=imb_factor, gpu=gpu,args=args)
     # PixMix
-    train_loader = TrainMixDataLoader(train_dir, transform_train, batch_size, mixing_set, is_train=True, dataset_type=dataset, imb_factor=imb_factor, gpu=gpu, args=args)
+    train_pixmix_loader = TrainMixDataLoader(train_dir, transform_train, batch_size, mixing_set, is_train=True, dataset_type=dataset, imb_factor=imb_factor, gpu=gpu, args=args)
     # Normal
     # train_loader = TrainDataLoader(train_dir, transform_train, batch_size, is_train=True, dataset_type=dataset, imb_factor=imb_factor)
 
     val_loader = TestDataLoader(val_dir, transform_test, 16, dataset_type=dataset, args=args)
     test_loader = TestDataLoader(test_dir, transform_test, 16, dataset_type=dataset, args=args)
 
-    return train_loader, val_loader, test_loader, nb_cls
+    return train_augmix_loader, train_pixmix_loader, val_loader, test_loader, nb_cls
 

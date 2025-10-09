@@ -92,137 +92,73 @@ class CRL_Criterion(nn.Module):
         
         return ranking_loss
     
-def prepare_mixup(batch_size, alpha=1.0, use_cuda=True):
-    """Returns mixed inputs, pairs of targets, and lambda."""
-    if alpha > 0:
-        lam = np.random.beta(alpha, alpha)
-    else:
-        lam = 1
+def safe_kl_div(log_p, q, reduction='batchmean'):
+    q = torch.clamp(q, min=1e-7, max=1)
+    q = q / q.sum(dim=1, keepdim=True)
+    return F.kl_div(log_p, q, reduction=reduction)
 
-    index = torch.randperm(batch_size).cuda()
-
-    return index, lam
-
-
-def mixing(data, index, lam):
-    return lam * data + (1 - lam) * data[index]
-
-
-def compute_loss(epoch,
-                 args,
-                 net,
-                 image,
-                 pixmix_image,
-                 target,
-                 image_idx,
-                 correct_log,
+def compute_loss(epoch, 
+                 args, 
+                 net, 
+                 image, 
+                 target, 
+                 image_idx, 
+                 correct_log, 
                  cls_criterion,
-                 mixup_criterion,
-                 rank_criterion
-                 ):
+                 mixup_criterion, 
+                 rank_criterion):
     """
     Compute total loss with multiple components:
     - Classification loss (CLS)
     - Mixup loss
     - CRL loss
-    - PixMix loss
+    - AugMix loss
     - CutMix loss
     """
+    images_all = torch.cat(image, 0).cuda()
 
     # ================== Forward: Normal ==================
-    output = net(image)
+
+    # output = net(image)
+    output_all = net(images_all)
 
     # ================== CLS Loss ==================
-    cls_weight = 1.0
-    loss_cls = cls_criterion(output, target)
+    logits_clean, logits_aug1, logits_aug2 = torch.split(output_all, image[0].size(0))
+    loss_cls = cls_criterion(logits_clean, target)
 
     # ================== Mixup Loss ==================
-    if args.mixup_weight > 0:
-        if args.orig_mixup:
-            index, lam = prepare_mixup(image.shape[0], 0.2)
-            data_mix = mixing(image, index, lam)
-            output_mixup = net(data_mix)
-            # Convert to one-hot
-            loss_mixup = lam * cls_criterion(output_mixup, target) + (1 - lam) * cls_criterion(output_mixup, target[index])
-            cls_weight = 0.0
-        else:
-            loss_mixup = mixup_criterion(image, target, net)
-        
-    else:
-        loss_mixup = torch.tensor(0.0, device=image.device)
+    loss_mixup = torch.tensor(0.0, device=image[0].device)
 
     # ================== CRL Loss ==================
-    if args.crl_weight > 0:
-        loss_crl = rank_criterion(output, image_idx, correct_log)
-    else:
-        loss_crl = torch.tensor(0.0, device=image.device)
+    loss_crl = torch.tensor(0.0, device=image[0].device)
 
-    # ================== PixMix Loss ==================
-    pix_output = net(pixmix_image)
-    loss_pixmix = cls_criterion(pix_output, target)
+    # ================== AugMix Loss ==================
+    p_clean = F.softmax(logits_clean, dim=1)
+    p_aug1 = F.softmax(logits_aug1, dim=1)
+    p_aug2 = F.softmax(logits_aug2, dim=1)
+
+    p_avg = (p_clean + p_aug1 + p_aug2) / 3.0
+    p_mixture_log = torch.clamp(p_avg, 1e-7, 1).log()
+
+    loss_augmix = 12 * (
+        safe_kl_div(p_mixture_log, p_clean, reduction='batchmean') +
+        safe_kl_div(p_mixture_log, p_aug1, reduction='batchmean') +
+        safe_kl_div(p_mixture_log, p_aug2, reduction='batchmean')
+    ) / 3.
+    cls_weight = 0.0
 
     # ================== CutMix Loss ==================
-    if args.cutmix_weight > 0 and args.cutmix_beta > 0 and torch.rand(1).item() < args.cutmix_prob:
-        # Sample lambda from Beta distribution
-        lam = torch.distributions.Beta(args.cutmix_beta, args.cutmix_beta).sample().item()
-
-        # Generate shuffled indices
-        rand_index = torch.randperm(image.size(0), device=image.device)
-
-        # Define two sets of targets
-        target_a = target
-        target_b = target[rand_index]
-
-        # Random bounding box
-        bbx1, bby1, bbx2, bby2 = rand_bbox(image.size(), lam)
-
-        # Apply CutMix
-        mixed_image = image.clone()
-        mixed_image[:, :, bbx1:bbx2, bby1:bby2] = image[rand_index, :, bbx1:bbx2, bby1:bby2]
-
-        # Adjust lambda according to the patch size
-        lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (image.size(-1) * image.size(-2)))
-
-        # Forward and compute loss
-        cutmix_output = net(mixed_image)
-        loss_cutmix = (F.cross_entropy(cutmix_output, target_a) * lam +
-                       F.cross_entropy(cutmix_output, target_b) * (1. - lam))
-        
-        cls_weight = 0.0
-    else:
-        loss_cutmix = torch.tensor(0.0, device=image.device)
+    loss_cutmix = torch.tensor(0.0, device=image[0].device)
 
     # ================== Total Loss ==================
     loss = (cls_weight * loss_cls
             + args.mixup_weight * loss_mixup
             + args.crl_weight * loss_crl
             + args.cutmix_weight * loss_cutmix
-            + args.pixmix_weight * loss_pixmix)
+            + args.augmix_weight * loss_augmix)
 
-    return loss, loss_cls, loss_mixup, loss_crl, loss_cutmix, loss_pixmix, output
+    return loss, loss_cls, loss_mixup, loss_crl, loss_cutmix, loss_augmix, logits_clean
 
-
-def rand_bbox(size, lam):
-    """
-    Generate random bounding box for CutMix.
-    size: (B, C, H, W)
-    lam: lambda parameter
-    """
-    H, W = size[2], size[3]
-    cut_rat = (1. - lam) ** 0.5
-    cut_h = int(H * cut_rat)
-    cut_w = int(W * cut_rat)
-
-    # uniform center
-    cx = torch.randint(W, (1,))
-    cy = torch.randint(H, (1,))
-
-    bbx1 = torch.clamp(cx - cut_w // 2, 0, W)
-    bby1 = torch.clamp(cy - cut_h // 2, 0, H)
-    bbx2 = torch.clamp(cx + cut_w // 2, 0, W)
-    bby2 = torch.clamp(cy + cut_h // 2, 0, H)
-
-    return bbx1.item(), bby1.item(), bbx2.item(), bby2.item()
 
 def disable_running_stats(model):
     def _disable(module):
@@ -239,7 +175,7 @@ def enable_running_stats(model):
     model.apply(_enable)
 
 
-def train_pixmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logger, writer, cos_scheduler, args):
+def train_augmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logger, writer, cos_scheduler, args):
     net.train()
 
     ## define criterion
@@ -248,8 +184,6 @@ def train_pixmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logg
     mixup_criterion = Mixup_Criterion(beta=args.mixup_beta, cls_criterion=cls_criterion)
     rank_criterion = CRL_Criterion(args)
 
-    cutout = None
-
 
     train_log = {
         'Top1 Acc.': utils.utils.AverageMeter(),
@@ -257,7 +191,7 @@ def train_pixmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logg
         'Mixup Loss': utils.utils.AverageMeter(),
         'CRL Loss': utils.utils.AverageMeter(),
         'CutMix Loss': utils.utils.AverageMeter(),
-        'PixMix Loss': utils.utils.AverageMeter(),
+        'AugMix Loss': utils.utils.AverageMeter(),
         'Tot. Loss': utils.utils.AverageMeter(),
         'LR': utils.utils.AverageMeter(),
     }
@@ -267,16 +201,15 @@ def train_pixmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logg
     if logger is not None:
         logger.info(msg)
         
-    for i, (image, pixmix_image, target, image_idx) in enumerate(train_loader):
-        image, pixmix_image, target = image.cuda(), pixmix_image.cuda(), target.cuda()
+    for i, (image,  target, image_idx, image_path) in enumerate(train_loader):
+        image,  target = image, target.cuda()
         
         enable_running_stats(net)
         
-        loss, loss_cls, loss_mixup, loss_crl, loss_cutmix, loss_pixmix, output = compute_loss(epoch,
+        loss, loss_cls, loss_mixup, loss_crl, loss_cutmix, loss_augmix, output = compute_loss(epoch,
                                                                                     args,
                                                                                     net,
                                                                                     image,
-                                                                                    pixmix_image,
                                                                                     target,
                                                                                     image_idx,
                                                                                     correct_log,
@@ -292,8 +225,17 @@ def train_pixmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logg
 
             disable_running_stats(net)
 
-            compute_loss(epoch, args, net, image, pixmix_image, target, image_idx, correct_log, cls_criterion, mixup_criterion,
-                         rank_criterion)[0].backward()
+            compute_loss(epoch,
+                        args,
+                        net,
+                        image,
+                        target,
+                        image_idx,
+                        correct_log,
+                        cls_criterion,
+                        mixup_criterion,
+                        rank_criterion
+                        )[0].backward()
             optimizer.second_step(zero_grad=True)
 
             if args.optim_name in ['fmfp', 'fmfpfsam']:
@@ -318,14 +260,14 @@ def train_pixmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logg
             lr = param_group["lr"]
             break
 
-        train_log['Tot. Loss'].update(loss.item(), image.size(0))
-        train_log['CLS Loss'].update(loss_cls.item(), image.size(0))
-        train_log['Mixup Loss'].update(loss_mixup.item(), image.size(0))
-        train_log['CRL Loss'].update(loss_crl.item(), image.size(0))
-        train_log['CutMix Loss'].update(loss_cutmix.item(), image.size(0))
-        train_log['PixMix Loss'].update(loss_pixmix.item(), image.size(0))
-        train_log['Top1 Acc.'].update(prec.item(), image.size(0))
-        train_log['LR'].update(lr, image.size(0))
+        train_log['Tot. Loss'].update(loss.item(), image[0].size(0))
+        train_log['CLS Loss'].update(loss_cls.item(), image[0].size(0))
+        train_log['Mixup Loss'].update(loss_mixup.item(), image[0].size(0))
+        train_log['CRL Loss'].update(loss_crl.item(), image[0].size(0))
+        train_log['CutMix Loss'].update(loss_cutmix.item(), image[0].size(0))
+        train_log['AugMix Loss'].update(loss_augmix.item(), image[0].size(0))
+        train_log['Top1 Acc.'].update(prec.item(), image[0].size(0))
+        train_log['LR'].update(lr, image[0].size(0))
 
         if i % 100 == 99:
             log = ['LR : {:.5f}'.format(train_log['LR'].avg)] + [key + ': {:.3f}'.format(train_log[key].avg) for key in

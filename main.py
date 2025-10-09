@@ -6,6 +6,7 @@ import json
 
 import train
 import valid
+import train_augmix
 from torch.optim.swa_utils import AveragedModel
 import model.get_model
 import optim
@@ -71,8 +72,12 @@ def main(proc_idx, args):
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
-    train_loader, valid_loader, _, nb_cls = data.dataset.get_loader(args, args.data_name, args.train_dir, args.val_dir,args.test_dir,
+    train_augmix_loader, train_pixmix_loader, valid_loader, _, nb_cls = data.dataset.get_loader(args, args.data_name, args.train_dir, args.val_dir,args.test_dir,
                                                                         args.batch_size, args.imb_factor, args.model_name, args.gpu)
+    if args.augmix_weight > 0:
+        train_loader = train_augmix_loader
+    else:
+        train_loader = train_pixmix_loader
 
     for r in range(args.nb_run):
         prefix = '{:d} / {:d} Running'.format(r + 1, args.nb_run)
@@ -130,8 +135,11 @@ def main(proc_idx, args):
                                                                                                 swa_lr=args.swa_lr,
                                                                                                 args=args,
                                                                                                 train_loader=train_loader)  
-                    
-            train.train(train_loader, net, net_ema, optimizer, epoch, correct_log, logger, writer, cos_scheduler, args)
+            if args.augmix_weight > 0:
+                train_augmix.train_augmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logger, writer, cos_scheduler, args)
+            else:
+                train.train_pixmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logger, writer, cos_scheduler, args)
+            
 
             if args.optim_name in ['swa', 'fmfp'] :
                 if epoch > args.swa_epoch_start:
