@@ -267,7 +267,7 @@ def train_pixmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logg
     if logger is not None:
         logger.info(msg)
         
-    for i, (image, pixmix_image, target, image_idx) in enumerate(train_loader):
+    for i, (image, target, pixmix_image, image_idx) in enumerate(train_loader):
         image, pixmix_image, target = image.cuda(), pixmix_image.cuda(), target.cuda()
         
         enable_running_stats(net)

@@ -187,7 +187,7 @@ class MixImageFolder(ImageFolder):
         # bce: return label_onehot
         # label_onehot = torch.zeros(self.num_classes, dtype=torch.float32).scatter_(0, torch.tensor(label), 1.0)
 
-        return self.to_tensor(deepcopy(img)), pixmix(img, mixing_pic, self.preprocess), label, index
+        return self.to_tensor(deepcopy(img)), label, pixmix(img, mixing_pic, self.preprocess), index
 
 def TrainDataLoader(img_dir, transform_train, batch_size, is_train=True, dataset_type='normal', imb_factor=None, gpu='0'):
     train_set = CustomImageFolder(img_dir, transform_train, is_train=is_train, dataset_type=dataset_type, imb_factor=imb_factor)
