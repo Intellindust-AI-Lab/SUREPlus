@@ -1,5 +1,5 @@
 import torch
-import valid
+import utils.valid as valid
 import os
 import utils.test_option
 import data.dataset

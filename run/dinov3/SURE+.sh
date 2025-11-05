@@ -1,4 +1,3 @@
-## Ours
 python3 main.py \
 --gpu 1 2 3 4 6 7 8 9 \
 --nb-run 1 \
@@ -14,7 +13,7 @@ python3 main.py \
 --rebn \
 --dinov3-repo /data1032/liyang/git/dinov3 \
 --dinov3-path /data/dinov3/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth \
---save-dir ./DinoV3-L16-ImageNet1k/SURE+ \
+--save-dir ./DinoV3_L16-ImageNet1k/SURE+ \
 ImageNet1k \
 --train-dir /data6022/Inet1K/train \
 --val-dir imagenet/val

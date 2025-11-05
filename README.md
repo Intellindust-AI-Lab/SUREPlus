@@ -1,106 +1,157 @@
-# 🧠 DINOv3 Training Framework on ImageNet-1K
+# 🧠 FROM MISCLASSIFICATIONS TO OUTLIERS: JOINT RELIABILITY ASSESSMENT IN CLASSIFICATION
 
-This repository provides a **training framework for DINOv3 (ViT-L/16 distilled)** on **ImageNet-1K**, with configurations aligned to the [**OpenOOD**](https://github.com/LIYangggggg/SURE-v2/tree/openood) benchmark.  
-It is designed for research on **OOD detection**, **robust classification**, and **representation learning**.
+This repository provides the official **training framework** accompanying our paper:
 
-> ⚠️ **Note:** This repository focuses on **training only**. For evaluation and testing, please use the modified [OpenOOD](https://github.com/LIYangggggg/SURE-v2/tree/openood) framework.
+> **“From Misclassifications to Outliers: Joint Reliability Assessment in Classification.”**
 
+We present a unified framework for **joint confidence estimation and OOD detection**, enabling robust reliability modeling across diverse architectures.
+This codebase supports **DINOv3 (ViT-L/16 distilled)** and **ResNet-18** backbones, trained on **ImageNet-1K**, with configurations fully compatible with the [**OpenOOD**](https://github.com/LIYangggggg/SURE-v2/tree/openood) benchmark.
 
+---
+
+## 🧩 Overview
+
+Our framework provides a modular and reproducible implementation of the **training stage** for large-scale representation learning and reliability assessment.
+It includes:
+
+* 🔹 **DINOv3** training scripts (`run/dinov3/`)
+* 🔹 **ResNet-18** training scripts (`run/r18/`)
+* 🔹 Configuration alignment with **OpenOOD** for direct evaluation
+* 🔹 Support for **PixMix**, **CutMix**, and other augmentation-based robustness studies
+
+> ⚠️ **Note:** This repository focuses on **training**.
+> For evaluation and OOD testing, please use the modified [OpenOOD](https://github.com/LIYangggggg/SURE-v2/tree/openood) framework.
+
+---
 
 ## 📦 Environment Setup
 
-A minimal environment is required for training. A pre-defined Conda/Pip environment file is provided for convenience.
+A minimal environment setup is required for training.
 
-- **Python:** 3.10+
-- **PyTorch:** 2.0+
+**Requirements:**
 
-Install dependencies:
+* Python ≥ 3.10
+* PyTorch ≥ 2.0
+* CUDA ≥ 11.7
+
+Install all dependencies:
 
 ```bash
 pip install -r requirements.txt
-````
+```
 
 ---
 
 ## 📂 Data Preparation
 
-This framework requires only the **training** and **validation** splits of ImageNet-1K.
+This framework requires only the **training** and **validation** splits of **ImageNet-1K**.
 
 1. **Training Set:**
-   Download from the [official ImageNet site](https://image-net.org/) and specify the directory with `--train-dir`.
+   Download from the [official ImageNet site](https://image-net.org/) and specify the path with:
+
+   ```bash
+   --train-dir /path/to/imagenet/train
+   ```
 
 2. **Validation Set:**
-   Download the prepared validation split from [Google Drive](https://drive.google.com/file/d/1rQvyeQNek1mGZxul9xar2A9skSgsfz7p/view?usp=sharing) and place it as:
+   Download from [Google Drive](https://drive.google.com/file/d/1rQvyeQNek1mGZxul9xar2A9skSgsfz7p/view?usp=sharing) and place it as:
 
-```
-./imagenet/val
-```
+   ```
+   ./imagenet/val
+   ```
 
-Specify this path with the `--val-dir` argument.
+   Specify via:
 
----
-
-## 🧪 Pretrained Weights & External Dependencies
-
-* **PixMix Dataset (optional):** [Download here](https://drive.google.com/file/d/1wnjYlCNArbjOXDlhCGZC53UxM-t-UvHV/view?usp=sharing) and specify the path in `option.py`.
-* **DINOv3 Pretrained Weights:** [Download ViT-L/16 distilled weights](https://ai.meta.com/resources/models-and-libraries/dinov3-downloads/) and pass `--dinov3-path`.
-* **DINOv3 Repository:** Fork [facebookresearch/dinov3](https://github.com/facebookresearch/dinov3) and specify the repo path with `--dinov3-repo`.
+   ```bash
+   --val-dir /path/to/imagenet/val
+   ```
 
 ---
 
-## 🚀 Training
+## 🔗 Pretrained Weights & External Resources
 
-Under the `run/` directory, multiple training scripts are provided, each corresponding to a specific configuration:
+* **DINOv3 Pretrained Weights:**
+  Download ViT-L/16 distilled weights from [Meta AI](https://ai.meta.com/resources/models-and-libraries/dinov3-downloads/) and specify:
 
-* `ce.sh` – Standard cross-entropy training
-* `ours.sh` – Custom training strategy (proposed method)
+  ```bash
+  --dinov3-path /path/to/dinov3_vitl16.pth
+  ```
 
-### 📊 Default Settings
+* **DINOv3 Repository:**
+  Clone [facebookresearch/dinov3](https://github.com/facebookresearch/dinov3) and specify:
 
-| Hyperparameter | Value        |
-| -------------- | ------------ |
-| Epochs         | 10           |
-| Batch Size     | 64           |
-| Optimizer      | AdamW        |
-| Learning Rate  | Configurable |
+  ```bash
+  --dinov3-repo /path/to/dinov3
+  ```
 
-Example: run baseline training with cross-entropy:
+* **PixMix Dataset (Optional):**
+  Download from [Google Drive](https://drive.google.com/file/d/1wnjYlCNArbjOXDlhCGZC53UxM-t-UvHV/view?usp=sharing) and define the path in `option.py`.
+
+---
+
+## 🚀 Training Usage
+
+All training scripts are located under the `run/` directory.
+Each subfolder corresponds to a backbone:
+
+```
+run/
+ ├── dinov3/      # ViT-L/16 distilled training (DINOv3)
+ └── r18/         # ResNet-18 baseline training
+```
+
+### Example 1: Train DINOv3 with Cross-Entropy
 
 ```bash
-run/dinov3/ce.sh
-run/dinov3/ours.sh
+bash run/dinov3/ce.sh
 ```
 
+### Example 2: Train DINOv3 with Our Proposed Method
+
+```bash
+bash run/dinov3/ours.sh
+```
+
+### Example 3: Train ResNet-18 Baselines
+
+```bash
+bash run/r18/ce.sh
+bash run/r18/ours.sh
+```
+
+
+## 🧠 Research Context
+
+This repository is designed for research on:
+
+* **Misclassification reliability estimation**
+* **OOD and uncertainty calibration**
+* **Joint assessment of in- and out-distribution confidence**
+* **Robust representation learning under distribution shifts**
+
 ---
 
-## 🔧 Advanced Training: Linear Head + Full Fine-Tuning
-
-For scenarios where **DINOv3 backbone** is frozen initially and **fine-tuned later**, you can follow a two-stage training strategy:
-
-1. **Stage 1:** Train only the linear head for 1 epoch with a higher learning rate.
-2. **Stage 2:** Unfreeze the backbone and fine-tune the entire model with a lower learning rate.
-
-This approach is recommended for transfer learning or OOD-related tasks.
-
----
-
-## ⚙️ Additional Notes
-
-* Ensure `--train-dir` and `--val-dir` are correctly specified in all training scripts.
-* All hyperparameters are aligned with **OpenOOD** defaults for fair comparison.
-* **Evaluation and testing are not included** in this repository. Please use the OpenOOD toolkit for post-training evaluation.
-
----
-
-## 📁 Repository Structure
+## 📁 Directory Structure
 
 ```
 .
-├── run/                     # Training scripts
-├── configs/                # YAML config files
-├── models/                 # Model definitions (DINOv3 + classifier)
-├── utils/                  # Training utilities
-├── option.py              # Argument definitions
-└── requirements.txt       # Dependencies
+├── run/
+│   ├── dinov3/              # DINOv3 (ViT-L/16 distilled) training scripts
+│   └── r18/                 # ResNet-18 training scripts
+│
+├── configs/                 # YAML configuration files
+├── models/                  # Model definitions (backbone + classifier)
+├── utils/                   # Training utilities and helper functions
+├── option.py                # Argument definitions
+├── requirements.txt         # Dependency list
+└── README.md                # This document
 ```
+
+---
+
+## 📜 Citation
+
+If you find this repository helpful, please consider citing our work:
+
+
 

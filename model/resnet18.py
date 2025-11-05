@@ -105,9 +105,11 @@ class ResNet(nn.Module):
         dim = out.size(-1)
         out = F.avg_pool2d(out, dim)
         out = out.view(out.size(0), -1)
+        
         y = self.classifier(out) if self.use_cos else self.linear(out)
+        # feat_norm = torch.norm(out, p=2, dim=-1)
         return (y, out) if feature_output else y
 
 
-def ResNet18(num_classes, use_cos=False, cos_temp=8, activation='relu'):
-    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes, use_cos, cos_temp, activation)
+def ResNet18(num_classes, use_cos=False, cos_temp=8):
+    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes, use_cos, cos_temp)

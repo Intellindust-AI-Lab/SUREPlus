@@ -13,7 +13,7 @@ class FriendlySAM(torch.optim.Optimizer):
         self.defaults.update(self.base_optimizer.defaults)
         self.sigma = sigma
         self.lmbda = lmbda
-        print ('FriendlySAM sigma:', self.sigma, 'lambda:', self.lmbda)
+        # print ('FriendlySAM sigma:', self.sigma, 'lambda:', self.lmbda)
 
     @torch.no_grad()
     def first_step(self, zero_grad=False):

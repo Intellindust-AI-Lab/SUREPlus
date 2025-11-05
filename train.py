@@ -3,11 +3,10 @@ import torch.nn as nn
 import torch
 import numpy as np
 import torch.nn.functional as F
-import random
 from torch.nn.modules.batchnorm import _BatchNorm
 
 
-class Mixup_Criterion(nn.Module):
+class RegMixup_Criterion(nn.Module):
     def __init__(self, beta, cls_criterion):
         super().__init__()
         self.beta = beta
@@ -73,16 +72,12 @@ class CRL_Criterion(nn.Module):
     code borrows from: https://github.com/daintlab/confidence-aware-learning/blob/master/crl_utils.py
     '''
 
-    def __init__(self, args):
+    def __init__(self):
         super().__init__()
         self.rank_criterion = torch.nn.MarginRankingLoss(margin=0)
-        self.loss_type = args.loss
-
+        
     def forward(self, output, image_idx, correct_log):
-        if self.loss_type == 'ce':
-            conf = torch.softmax(output, dim=1)
-        else:
-            conf = torch.sigmoid(output)  # bs x num_class
+        conf = torch.softmax(output, dim=1)
         conf,_ = conf.max(dim=1)  # bs x 1
         conf_roll, image_idx_roll = torch.roll(conf, -1), torch.roll(image_idx, -1)
         rank_target, rank_margin = correct_log.get_target_margin(image_idx, image_idx_roll)
@@ -92,24 +87,8 @@ class CRL_Criterion(nn.Module):
         
         return ranking_loss
     
-def prepare_mixup(batch_size, alpha=1.0, use_cuda=True):
-    """Returns mixed inputs, pairs of targets, and lambda."""
-    if alpha > 0:
-        lam = np.random.beta(alpha, alpha)
-    else:
-        lam = 1
 
-    index = torch.randperm(batch_size).cuda()
-
-    return index, lam
-
-
-def mixing(data, index, lam):
-    return lam * data + (1 - lam) * data[index]
-
-
-def compute_loss(epoch,
-                 args,
+def compute_loss(args,
                  net,
                  image,
                  pixmix_image,
@@ -117,37 +96,25 @@ def compute_loss(epoch,
                  image_idx,
                  correct_log,
                  cls_criterion,
-                 mixup_criterion,
-                 rank_criterion
-                 ):
+                 regmixup_criterion,
+                 rank_criterion):
     """
     Compute total loss with multiple components:
     - Classification loss (CLS)
     - Mixup loss
     - CRL loss
     - PixMix loss
-    - CutMix loss
     """
 
     # ================== Forward: Normal ==================
     output = net(image)
 
     # ================== CLS Loss ==================
-    cls_weight = 1.0
     loss_cls = cls_criterion(output, target)
 
-    # ================== Mixup Loss ==================
-    if args.mixup_weight > 0:
-        if args.orig_mixup:
-            index, lam = prepare_mixup(image.shape[0], 0.2)
-            data_mix = mixing(image, index, lam)
-            output_mixup = net(data_mix)
-            # Convert to one-hot
-            loss_mixup = lam * cls_criterion(output_mixup, target) + (1 - lam) * cls_criterion(output_mixup, target[index])
-            cls_weight = 0.0
-        else:
-            loss_mixup = mixup_criterion(image, target, net)
-        
+    # ================== RegMixup Loss ==================
+    if args.regmixup_weight > 0:
+        loss_mixup = regmixup_criterion(image, target, net)
     else:
         loss_mixup = torch.tensor(0.0, device=image.device)
 
@@ -157,72 +124,19 @@ def compute_loss(epoch,
     else:
         loss_crl = torch.tensor(0.0, device=image.device)
 
-    # ================== PixMix Loss ==================
-    pix_output = net(pixmix_image)
-    loss_pixmix = cls_criterion(pix_output, target)
-
-    # ================== CutMix Loss ==================
-    if args.cutmix_weight > 0 and args.cutmix_beta > 0 and torch.rand(1).item() < args.cutmix_prob:
-        # Sample lambda from Beta distribution
-        lam = torch.distributions.Beta(args.cutmix_beta, args.cutmix_beta).sample().item()
-
-        # Generate shuffled indices
-        rand_index = torch.randperm(image.size(0), device=image.device)
-
-        # Define two sets of targets
-        target_a = target
-        target_b = target[rand_index]
-
-        # Random bounding box
-        bbx1, bby1, bbx2, bby2 = rand_bbox(image.size(), lam)
-
-        # Apply CutMix
-        mixed_image = image.clone()
-        mixed_image[:, :, bbx1:bbx2, bby1:bby2] = image[rand_index, :, bbx1:bbx2, bby1:bby2]
-
-        # Adjust lambda according to the patch size
-        lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (image.size(-1) * image.size(-2)))
-
-        # Forward and compute loss
-        cutmix_output = net(mixed_image)
-        loss_cutmix = (F.cross_entropy(cutmix_output, target_a) * lam +
-                       F.cross_entropy(cutmix_output, target_b) * (1. - lam))
-        
-        cls_weight = 0.0
+    # ================== RegPixMix Loss ==================
+    if args.pixmix_weight > 0:
+        pix_output = net(pixmix_image)
+        loss_pixmix = cls_criterion(pix_output, target)
     else:
-        loss_cutmix = torch.tensor(0.0, device=image.device)
+        loss_pixmix = torch.tensor(0.0, device=image.device)
 
     # ================== Total Loss ==================
-    loss = (cls_weight * loss_cls
-            + args.mixup_weight * loss_mixup
-            + args.crl_weight * loss_crl
-            + args.cutmix_weight * loss_cutmix
-            + args.pixmix_weight * loss_pixmix)
+    loss =  loss_cls + args.regmixup_weight * loss_mixup + args.crl_weight * loss_crl + args.pixmix_weight * loss_pixmix
 
-    return loss, loss_cls, loss_mixup, loss_crl, loss_cutmix, loss_pixmix, output
+    return loss, loss_cls, loss_mixup, loss_crl, loss_pixmix, output
 
 
-def rand_bbox(size, lam):
-    """
-    Generate random bounding box for CutMix.
-    size: (B, C, H, W)
-    lam: lambda parameter
-    """
-    H, W = size[2], size[3]
-    cut_rat = (1. - lam) ** 0.5
-    cut_h = int(H * cut_rat)
-    cut_w = int(W * cut_rat)
-
-    # uniform center
-    cx = torch.randint(W, (1,))
-    cy = torch.randint(H, (1,))
-
-    bbx1 = torch.clamp(cx - cut_w // 2, 0, W)
-    bby1 = torch.clamp(cy - cut_h // 2, 0, H)
-    bbx2 = torch.clamp(cx + cut_w // 2, 0, W)
-    bby2 = torch.clamp(cy + cut_h // 2, 0, H)
-
-    return bbx1.item(), bby1.item(), bbx2.item(), bby2.item()
 
 def disable_running_stats(model):
     def _disable(module):
@@ -239,24 +153,20 @@ def enable_running_stats(model):
     model.apply(_enable)
 
 
-def train_pixmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logger, writer, cos_scheduler, args):
+def train_epoch(train_loader, net, net_ema, optimizer, epoch, correct_log, logger, writer, cos_scheduler, args):
     net.train()
 
     ## define criterion
 
     cls_criterion = torch.nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
-    mixup_criterion = Mixup_Criterion(beta=args.mixup_beta, cls_criterion=cls_criterion)
-    rank_criterion = CRL_Criterion(args)
-
-    cutout = None
-
+    regmixup_criterion = RegMixup_Criterion(beta=args.mixup_beta, cls_criterion=cls_criterion)
+    rank_criterion = CRL_Criterion()
 
     train_log = {
         'Top1 Acc.': utils.utils.AverageMeter(),
         'CLS Loss': utils.utils.AverageMeter(),
         'Mixup Loss': utils.utils.AverageMeter(),
         'CRL Loss': utils.utils.AverageMeter(),
-        'CutMix Loss': utils.utils.AverageMeter(),
         'PixMix Loss': utils.utils.AverageMeter(),
         'Tot. Loss': utils.utils.AverageMeter(),
         'LR': utils.utils.AverageMeter(),
@@ -267,32 +177,30 @@ def train_pixmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logg
     if logger is not None:
         logger.info(msg)
         
-    for i, (image, target, pixmix_image, image_idx) in enumerate(train_loader):
+    for i, (image, pixmix_image, target, image_idx) in enumerate(train_loader):
         image, pixmix_image, target = image.cuda(), pixmix_image.cuda(), target.cuda()
         
         enable_running_stats(net)
         
-        loss, loss_cls, loss_mixup, loss_crl, loss_cutmix, loss_pixmix, output = compute_loss(epoch,
-                                                                                    args,
-                                                                                    net,
-                                                                                    image,
-                                                                                    pixmix_image,
-                                                                                    target,
-                                                                                    image_idx,
-                                                                                    correct_log,
-                                                                                    cls_criterion,
-                                                                                    mixup_criterion,
-                                                                                    rank_criterion
-                                                                                    )
+        loss, loss_cls, loss_mixup, loss_crl, loss_pixmix, output = compute_loss(args,
+                                                                                net,
+                                                                                image,
+                                                                                pixmix_image,
+                                                                                target,
+                                                                                image_idx,
+                                                                                correct_log,
+                                                                                cls_criterion,
+                                                                                regmixup_criterion,
+                                                                                rank_criterion)
         optimizer.zero_grad()
         loss.backward()
-        if args.optim_name in ['sam', 'fmfp', 'fsam', 'fmfpfsam', 'csam', 'cfsam']:
+        if args.optim_name in ['sam', 'fmfp', 'fsam', 'fmfpfsam']:
 
             optimizer.first_step(zero_grad=True)
 
             disable_running_stats(net)
 
-            compute_loss(epoch, args, net, image, pixmix_image, target, image_idx, correct_log, cls_criterion, mixup_criterion,
+            compute_loss(args, net, image, pixmix_image, target, image_idx, correct_log, cls_criterion, regmixup_criterion,
                          rank_criterion)[0].backward()
             optimizer.second_step(zero_grad=True)
 
@@ -322,7 +230,6 @@ def train_pixmix(train_loader, net, net_ema, optimizer, epoch, correct_log, logg
         train_log['CLS Loss'].update(loss_cls.item(), image.size(0))
         train_log['Mixup Loss'].update(loss_mixup.item(), image.size(0))
         train_log['CRL Loss'].update(loss_crl.item(), image.size(0))
-        train_log['CutMix Loss'].update(loss_cutmix.item(), image.size(0))
         train_log['PixMix Loss'].update(loss_pixmix.item(), image.size(0))
         train_log['Top1 Acc.'].update(prec.item(), image.size(0))
         train_log['LR'].update(lr, image.size(0))

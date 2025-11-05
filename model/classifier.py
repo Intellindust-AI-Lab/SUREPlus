@@ -13,9 +13,6 @@ class Classifier(torch.nn.Module):
         self.weight = torch.nn.Parameter(fc.weight.t(), requires_grad=True)
         self.bias = torch.nn.Parameter(fc.bias, requires_grad=True)
         self.cos_temp = torch.nn.Parameter(torch.FloatTensor(1).fill_(cos_temp), requires_grad=False)
-        # self.apply = self.apply_cosine
-    # def get_weight(self):
-        # return self.weight, self.bias
 
     def apply_cosine(self, feature, weight, bias):
         

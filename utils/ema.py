@@ -49,22 +49,6 @@ class ModelEMA:
                     v *= decay_value
                     v += (1.0 - decay_value) * state_dict[k].detach()
 
-    def update_woBN(self, model):
-        # Update EMA parameters
-        with torch.no_grad():
-            self.updates += 1
-            decay_value = self.decay(self.updates)
-
-            model_state = model.state_dict()
-            ema_state = self.ema.state_dict()
-
-            for name, param in ema_state.items():
-                if param.dtype.is_floating_point:
-                    if "running_mean" in name or "running_var" in name or "num_batches_tracked" in name:
-                        param.copy_(model_state[name])
-                    else:
-                        param.mul_(decay_value).add_((1.0 - decay_value) * model_state[name])
-
     @torch.no_grad()
     def update_bn(self, loader, device=None):
         """

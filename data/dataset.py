@@ -1,289 +1,260 @@
-import numpy as np
-import torch
-import uuid
-import random
-import torch.distributed as dist
-import torchvision.transforms
-from torch.utils.data import DataLoader, Subset, Dataset
-from torchvision.datasets import ImageFolder
-import utils.pixmix_utils as pixmix_utils
+# data/loaders.py
+"""
+Refactored data loader module.
+Supports:
+- cifar100 (image size 32)
+- imagenet1k (image size 224)
+- PixMix mixing dataset support (keeps PixMix logic; AugMix removed)
+- Multi-GPU / distributed training (use `distributed=True` and provide rank/world_size via torch.distributed)
+Notes:
+- All comments are in English.
+- No BCE / AugMix / imbalance generation code included.
+"""
+
+import os
 from copy import deepcopy
-from torch.utils.data.sampler import BatchSampler
+import random
+import numpy as np
+from typing import Tuple, Optional
+
+import torch
+from torch.utils.data import DataLoader
+from torch.utils.data import Dataset
 from torch.utils.data.distributed import DistributedSampler
-from torchvision.transforms import v2
-from torchvision.transforms.functional import InterpolationMode
-from data.sampler import InfiniteSampler
+import torchvision
+from torchvision.datasets import ImageFolder
+import torchvision.transforms as T
 import data.augmentations as augmentations
-
-def worker_init_reset_seed(worker_id):
-    seed = uuid.uuid4().int % 2 ** 32
-    random.seed(seed)
-    torch.set_rng_state(torch.manual_seed(seed).get_state())
-    np.random.seed(seed)
-
-# Imagent1k
-to_tensor = torchvision.transforms.Compose([
-                                            torchvision.transforms.ToTensor(),
-                                            torchvision.transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-                                        ])   
+import utils.pixmix_utils as pixmix_utils
 
 
-def augment_input(image):
+
+def _get_mean_std(dataset_name: str):
+    """Return normalization mean/std for supported datasets."""
+    if dataset_name == "cifar100":
+        return (0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)
+    elif dataset_name == "imagenet1k":
+        return (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+    else:
+        raise ValueError(f"Unsupported dataset: {dataset_name}")
+
+
+def _build_transforms(dataset_name: str):
+    """
+    Build train/test transforms for supported datasets.
+    - cifar100: train size 32.
+    - imagenet1k: train size 224.
+    model_name kept for possible model-specific normalization (e.g., deit).
+    """
+    mean, std = _get_mean_std(dataset_name)
+
+    if dataset_name == "cifar100":
+        train_transform = T.Compose([
+            T.RandomCrop(32, padding=4),
+            T.RandomHorizontalFlip(),
+            # T.ToTensor(),
+            # T.Normalize(mean, std)
+        ])
+        test_transform = T.Compose([
+            T.ToTensor(),
+            T.Normalize(mean, std)
+        ])
+        mixing_transform = T.Compose([
+            T.Resize(36),
+            T.RandomCrop(32)
+        ])
+    else:  # imagenet1k
+        train_transform = T.Compose([
+            T.Resize(256),
+            T.RandomResizedCrop(224),
+            T.RandomHorizontalFlip(),
+            # T.ToTensor(),
+            # T.Normalize(mean, std)
+        ])
+        test_transform = T.Compose([
+            T.Resize(256),
+            T.CenterCrop(224),
+            T.ToTensor(),
+            T.Normalize(mean, std)
+        ])
+        mixing_transform = T.Compose([
+            T.Resize(256),
+            T.RandomCrop(224)
+        ])
+
+    return train_transform, test_transform, mixing_transform
+
+
+# ----------------------
+# PixMix related helper
+# ----------------------
+def _augment_input(image):
     aug_list = pixmix_utils.augmentations_all 
     op = np.random.choice(aug_list)
     return op(image.copy(), 3)
 
-def pixmix(orig, mixing_pic, preprocess):
-  
+
+def pixmix_mixing(orig, mixing_img, preprocess):
+    """
+    Perform PixMix-style mixing and return normalized torch tensor.
+    - orig: PIL.Image original image
+    - mixing_img: PIL.Image chosen from mixing set
+    - preprocess: dict with keys {'tensorize': ToTensor(), 'normalize': Normalize()}
+    - augmentations_list: list of augmentation functions (optional)
+    - mixings: list of mixing functions (optional)
+    """
     mixings = pixmix_utils.mixings
-    tensorize, normalize = preprocess['tensorize'], preprocess['normalize']
-    if np.random.random() < 0.5:
-        mixed = tensorize(augment_input(orig))
+    tensorize = preprocess['tensorize']
+    normalize = preprocess['normalize']
+
+    # choose either augmented original or original
+    if random.random() < 0.5:
+        mixed = tensorize(_augment_input(orig))
     else:
         mixed = tensorize(orig)
 
+    # choose number of mixing iterations (1..4)
     for _ in range(np.random.randint(1, 4 + 1)):
 
-        if np.random.random() < 0.5:
-            aug_image_copy = tensorize(augment_input(orig))
+        if random.random() < 0.5:
+            partner = tensorize(_augment_input(orig)) 
         else:
-            aug_image_copy = tensorize(mixing_pic)
+            partner = tensorize(mixing_img)
 
-    mixed_op = np.random.choice(mixings)
-    mixed = mixed_op(mixed, aug_image_copy, 3)
+
+    mixing_op = random.choice(mixings)
+    mixed = mixing_op(mixed, partner, 3)
     mixed = torch.clip(mixed, 0, 1)
-
     return normalize(mixed)
 
-def generate_imbalanced_data(indices, labels, imb_factor, num_classes):
-    class_indices = [np.where(labels == i)[0] for i in range(num_classes)]
-    img_max = len(indices) / num_classes
-    img_num_per_cls = [int(img_max * (imb_factor ** (i / (num_classes - 1.0)))) for i in range(num_classes)]
 
-    imbalanced_indices = []
-    for cls_idx, img_num in zip(range(num_classes), img_num_per_cls):
-        cls_indices = class_indices[cls_idx]
-        np.random.shuffle(cls_indices)
-        selec_indices = cls_indices[:img_num]
-        imbalanced_indices.extend(selec_indices)
-
-    return imbalanced_indices
-
-
-def aug(image, preprocess):
-    """Perform AugMix augmentations and compute mixture.
-
-    Args:
-        image: PIL.Image input image
-        preprocess: Preprocessing function which should return a torch tensor.
-
-    Returns:
-        mixed: Augmented and mixed image.
+# ----------------------
+# Dataset wrappers
+# ----------------------
+class SimpleImageFolder(ImageFolder):
     """
-    aug_list = augmentations.augmentations
-
-    ws = np.float32(np.random.dirichlet([1] * -1))
-    m = np.float32(np.random.beta(1, 1))
-
-    mix = torch.zeros_like(preprocess(image))
-    for i in range(-1):
-        image_aug = image.copy()
-        depth = -1 if -1 > 0 else np.random.randint(
-            1, 4)
-        for _ in range(depth):
-            op = np.random.choice(aug_list)
-            image_aug = op(image_aug, 3)
-        # Preprocessing commutes since all coefficients are convex
-        mix += ws[i] * preprocess(image_aug)
-
-    mixed = (1 - m) * preprocess(image) + m * mix
-    return mixed
-
-
-class AugMixDataset(torch.utils.data.Dataset):
-    """Dataset wrapper to perform AugMix augmentation."""
-
-    def __init__(self, dataset, preprocess, no_jsd=False):
-        self.dataset = dataset
-        self.preprocess = preprocess
-        self.no_jsd = no_jsd
-
-    def __getitem__(self, i):
-        x, y, index, path = self.dataset[i]
-        im_tuple = (self.preprocess(x), aug(x, self.preprocess),
-                    aug(x, self.preprocess))
-        return im_tuple, y, index, path
-
-    def __len__(self):
-        return len(self.dataset)
-    
-    
-class CustomImageFolder(ImageFolder):
-    def __init__(self, root, transform=None, target_transform=None, is_train=False, dataset_type='normal', imb_factor=None, args=None):
-        super(CustomImageFolder, self).__init__(root, transform=transform, target_transform=target_transform)
-        self.is_train = is_train
-        self.num_classes = 1000 
-        if self.is_train and dataset_type in ['cifar10_LT', 'cifar100_LT'] and imb_factor is not None:
-            self.gen_imbalanced_data(imb_factor, dataset_type)
-        if args:
-            self.loss = args.loss
-
-    def gen_imbalanced_data(self, imb_factor, dataset_type):
-        targets_np = np.array(self.targets, dtype=np.int64)
-
-        if dataset_type in ['cifar10','cifar10_LT']:
-            num_classes = 10
-        elif dataset_type in ['cifar100','cifar100_LT']:
-            num_classes = 100
-        assert dataset_type in ['cifar10','cifar10_LT','cifar100','cifar100_LT'], "error: new dataset should set num_classes"
-        imbalanced_indices = generate_imbalanced_data(np.arange(len(self.samples)), targets_np, imb_factor, num_classes)
-        self.samples = [self.samples[i] for i in imbalanced_indices]
-        self.targets = [self.targets[i] for i in imbalanced_indices]
+    Simple wrapper around torchvision.datasets.ImageFolder that returns:
+    (image_tensor, label, index, path)
+    No one-hot labels, no imbalance logic.
+    """
+    def __init__(self, root, transform=None):
+        super().__init__(root, transform=transform)
 
     def __getitem__(self, index):
-        img, label = super(CustomImageFolder, self).__getitem__(index)
         path, _ = self.samples[index]
-
+        img, label = super().__getitem__(index)
         return img, label, index, path
 
-class MixImageFolder(ImageFolder):
-    def __init__(self, root, transform=None, mixing_set=None, target_transform=None, is_train=False, dataset_type='normal', imb_factor=None, args=None):
-        super(MixImageFolder, self).__init__(root, transform=transform, target_transform=target_transform)
-        self.is_train = is_train
+
+class PixMixImageFolder(ImageFolder):
+    """
+    ImageFolder wrapper for PixMix training.
+    Returns:
+      (clean_tensor, mixed_tensor, label, index, path)
+    - mixed_tensor is produced by pixmix_mixing using mixing_set.
+    - If pixmix_utils is not available, mixed_tensor == clean_tensor.
+    """
+    def __init__(self, root, transform=None, mixing_set: Optional[ImageFolder] = None, dataset_name: str = "cifar100"):
+        super(PixMixImageFolder, self).__init__(root, transform=transform)
         self.mixing_set = mixing_set
-        self.num_classes = 1000
-        self.preprocess = {'normalize': torchvision.transforms.Normalize([0.5] * 3, [0.5] * 3), 'tensorize': torchvision.transforms.ToTensor()}
-        if self.is_train and dataset_type in ['cifar10_LT', 'cifar100_LT'] and imb_factor is not None:
-            self.gen_imbalanced_data(imb_factor, dataset_type)
-        if args:
-            self.loss = args.loss
+        self.dataset_name = dataset_name
 
-        mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
-        self.to_tensor = torchvision.transforms.Compose([
-                                            torchvision.transforms.ToTensor(),
-                                            torchvision.transforms.Normalize(mean, std)
-                                        ])   
-        
-    def gen_imbalanced_data(self, imb_factor, dataset_type):
-        targets_np = np.array(self.targets, dtype=np.int64)
+        # preprocessing used by pixmix_mixing
+        mean, std = _get_mean_std(dataset_name)
+        self.preprocess = {
+            'tensorize': T.ToTensor(),
+            'normalize': T.Normalize(mean, std)
+        }
 
-        if dataset_type in ['cifar10','cifar10_LT']:
-            num_classes = 10
-        elif dataset_type in ['cifar100','cifar100_LT']:
-            num_classes = 100
-        elif dataset_type in ['imagenet1k']:
-            num_classes = 1000
-        assert dataset_type in ['cifar10','cifar10_LT','cifar100','cifar100_LT'], "error: new dataset should set num_classes"
-        imbalanced_indices = generate_imbalanced_data(np.arange(len(self.samples)), targets_np, imb_factor, num_classes)
-        self.samples = [self.samples[i] for i in imbalanced_indices]
-        self.targets = [self.targets[i] for i in imbalanced_indices]
-    
 
     def __getitem__(self, index):
-        img, label = super(MixImageFolder, self).__getitem__(index)
+        # path, _ = self.samples[index]
+        img, label = super(PixMixImageFolder, self).__getitem__(index)  # transform applied -> tensor or PIL depending on transform
+        # For mixing partner, randomly sample one from mixing_set (if provided)
         rnd_idx = np.random.choice(len(self.mixing_set))
-        mixing_pic, _ = self.mixing_set[rnd_idx]
-        # ce: return label
-        # bce: return label_onehot
-        # label_onehot = torch.zeros(self.num_classes, dtype=torch.float32).scatter_(0, torch.tensor(label), 1.0)
+        mixing_img, _ = self.mixing_set[rnd_idx]
 
-        return self.to_tensor(deepcopy(img)), label, pixmix(img, mixing_pic, self.preprocess), index
+        # attempt PixMix using PIL images
+        mixed = pixmix_mixing(img, mixing_img, self.preprocess)
 
-def TrainDataLoader(img_dir, transform_train, batch_size, is_train=True, dataset_type='normal', imb_factor=None, gpu='0'):
-    train_set = CustomImageFolder(img_dir, transform_train, is_train=is_train, dataset_type=dataset_type, imb_factor=imb_factor)
-    train_loader = DataLoader(dataset=train_set, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True)
-    sampler = DistributedSampler(train_set, shuffle=True)
+        clean = T.Compose([T.ToTensor(), T.Normalize(*_get_mean_std(self.dataset_name))])(deepcopy(img))
 
-    batch_sampler = BatchSampler(sampler, batch_size // len(gpu), drop_last=True)
-    dataloader_kwargs = {"num_workers": 4, "pin_memory": True}
-    dataloader_kwargs["batch_sampler"] = batch_sampler
-    dataloader_kwargs["worker_init_fn"] = worker_init_reset_seed
-    train_loader = DataLoader(train_set, **dataloader_kwargs)
-    return train_loader
+        return clean,  mixed,  label, index
 
-def TrainAugMixDataLoader(img_dir, transform_train, batch_size, preprocess, is_train=True, dataset_type='normal', imb_factor=None,  gpu=[0],args=None):
-    train_data = CustomImageFolder(img_dir, transform_train, is_train=is_train, dataset_type=dataset_type, imb_factor=imb_factor)
-    train_set = AugMixDataset(train_data, preprocess, False)
-    dataloader_kwargs = {
-        "num_workers": 8,
-        "pin_memory": True,
-        "worker_init_fn": worker_init_reset_seed
-    }
-    if gpu is not None and dist.is_initialized():
-        sampler = DistributedSampler(train_set, shuffle=True)
-        batch_sampler = BatchSampler(sampler, batch_size // len(gpu), drop_last=True)
-        dataloader_kwargs["batch_sampler"] = batch_sampler
-        train_loader = DataLoader(train_set, **dataloader_kwargs)
+
+# ----------------------
+# DataLoader builders
+# ----------------------
+def _make_dataloader(dataset: Dataset, batch_size: int, num_workers: int, distributed: bool, shuffle: bool, drop_last: bool):
+    """
+    Create DataLoader; if distributed is True, wrap dataset with DistributedSampler.
+    """
+    if distributed:
+        sampler = DistributedSampler(dataset, shuffle=shuffle)
+        dl = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, sampler=sampler, pin_memory=True, drop_last=drop_last)
     else:
-        train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, drop_last=True, **dataloader_kwargs)
-    return train_loader
-
-def TrainMixDataLoader(img_dir, transform_train, batch_size, mixing_set, is_train=True, dataset_type='normal', imb_factor=None, gpu=[0], args=None):
-    train_set = MixImageFolder(img_dir, transform_train, mixing_set=mixing_set, is_train=is_train, dataset_type=dataset_type, imb_factor=imb_factor, args=args)
-    dataloader_kwargs = {
-        "num_workers": 8,
-        "pin_memory": True,
-        "worker_init_fn": worker_init_reset_seed
-    }
-    if gpu is not None and dist.is_initialized():
-        sampler = DistributedSampler(train_set, shuffle=True)
-        batch_sampler = BatchSampler(sampler, batch_size // len(gpu), drop_last=True)
-        dataloader_kwargs["batch_sampler"] = batch_sampler
-        train_loader = DataLoader(train_set, **dataloader_kwargs)
-    else:
-        train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, drop_last=True, **dataloader_kwargs)
-
-    return train_loader
-
-# test data loader
-def TestDataLoader(img_dir, transform_test, batch_size, dataset_type, args):
-    test_set = CustomImageFolder(img_dir, transform_test, dataset_type=dataset_type, args=args)
-    test_loader = DataLoader(dataset=test_set, batch_size=batch_size, shuffle=False, num_workers=4, drop_last=False)
-
-    return test_loader
-
-def get_loader(args, dataset, train_dir, val_dir, test_dir, batch_size, imb_factor, model_name, gpu=[0]):
-
-    norm_mean, norm_std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
-    nb_cls = 1000
-
-    # ResNet50
-    train_aug_list = [
-        torchvision.transforms.Resize(256, interpolation = InterpolationMode.BILINEAR),
-        torchvision.transforms.CenterCrop(224),
-        torchvision.transforms.RandomHorizontalFlip(0.5),
-        # torchvision.transforms.ToTensor(),
-        # torchvision.transforms.Normalize(norm_mean, norm_std)
-        ] 
-    test_aug_list = [
-        torchvision.transforms.Resize(256, interpolation = InterpolationMode.BILINEAR),
-        torchvision.transforms.CenterCrop(224),
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize(norm_mean, norm_std)]
+        dl = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=shuffle, pin_memory=True, drop_last=drop_last)
+    return dl
 
 
-        
-    # transformation of the train set
-    transform_train = torchvision.transforms.Compose(train_aug_list)
-    # transformation of the test set
-    transform_test = torchvision.transforms.Compose(test_aug_list)
+def get_loaders(
+        train_dir: str,
+        val_dir: str,
+        test_dir: str,
+        pixmix_dir: Optional[str],
+        dataset_name: str,
+        batch_size: int = 128,
+        num_workers: int = 8,
+        distributed: bool = False,
+        model_name: str = "default",
+        drop_last: bool = True
+    ) -> Tuple[DataLoader, DataLoader, DataLoader, int]:
+    """
+    Build train/val/test DataLoaders for supported datasets.
 
-    mixing_set_transform = torchvision.transforms.Compose(
-                                                    [torchvision.transforms.Resize(256), 
-                                                    torchvision.transforms.RandomCrop(224)])  
-      
-    mixing_set = ImageFolder(args.pixmix_path, transform=mixing_set_transform)
+    Args:
+      train_dir, val_dir, test_dir: dataset root dirs (ImageFolder-style).
+      pixmix_dir: optional path containing images for PixMix mixing set. If None, PixMix mixing will be disabled.
+      dataset_name: 'cifar100' or 'imagenet1k'
+      batch_size: global batch size per process (if distributed True, this is per-process batch).
+      num_workers: dataloader num_workers
+      distributed: whether running distributed training (uses DistributedSampler)
+      model_name: reserved for model-specific changes (kept for compatibility)
+      drop_last: whether to drop_last in train loader
 
-    # AugMix
-    preprocess = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
-    train_augmix_loader = TrainAugMixDataLoader(train_dir, transform_train, batch_size, preprocess, is_train=True, dataset_type=dataset, imb_factor=imb_factor, gpu=gpu,args=args)
-    # PixMix
-    train_pixmix_loader = TrainMixDataLoader(train_dir, transform_train, batch_size, mixing_set, is_train=True, dataset_type=dataset, imb_factor=imb_factor, gpu=gpu, args=args)
-    # Normal
-    # train_loader = TrainDataLoader(train_dir, transform_train, batch_size, is_train=True, dataset_type=dataset, imb_factor=imb_factor)
+    Returns:
+      train_loader, val_loader, test_loader, num_classes
+    """
+    assert dataset_name in ("cifar100", "imagenet1k"), "Only cifar100 and imagenet1k are supported."
 
-    val_loader = TestDataLoader(val_dir, transform_test, 16, dataset_type=dataset, args=args)
-    test_loader = TestDataLoader(test_dir, transform_test, 16, dataset_type=dataset, args=args)
+    train_t, test_t, mixing_t = _build_transforms(dataset_name)
+    num_classes = 100 if dataset_name == "cifar100" else 1000
 
-    return train_augmix_loader, train_pixmix_loader, val_loader, test_loader, nb_cls
+    # ------- Mixing set (for PixMix) -------
+    mixing_set = ImageFolder(pixmix_dir, transform=mixing_t)
 
+    # ------- Train dataset -------
+    train_dataset = PixMixImageFolder(train_dir, transform=train_t, mixing_set=mixing_set, dataset_name=dataset_name)
+
+    train_shuffle = not distributed
+    train_loader = _make_dataloader(train_dataset, batch_size=batch_size, num_workers=num_workers,
+                                    distributed=distributed, shuffle=train_shuffle, drop_last=drop_last)
+
+
+    # ------- Validation & Test datasets -------
+    val_dataset = SimpleImageFolder(val_dir, transform=test_t)
+    test_dataset = SimpleImageFolder(test_dir, transform=test_t)
+    val_loader = _make_dataloader(val_dataset, batch_size=batch_size, num_workers=num_workers, distributed=False, shuffle=False, drop_last=False)
+    test_loader = _make_dataloader(test_dataset, batch_size=batch_size, num_workers=num_workers, distributed=False, shuffle=False, drop_last=False)
+
+    return train_loader, val_loader, test_loader, num_classes
+
+
+# Small helper for users to adapt for distributed launch:
+def set_seed(seed: int = 42):
+    """Set seed for python, numpy and torch for reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)

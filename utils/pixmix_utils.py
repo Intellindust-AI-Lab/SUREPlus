@@ -19,7 +19,7 @@ import torch
 from PIL import Image, ImageOps, ImageEnhance
 
 # ImageNet code should change this value
-IMAGE_SIZE = 224 # 32
+IMAGE_SIZE = 32
 
 #########################################################
 #################### AUGMENTATIONS ######################
