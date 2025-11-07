@@ -27,11 +27,6 @@ def main(config):
 if __name__ == '__main__':
 
     config = setup_config()
-    # generate output directory and save the full config file
-    # setup_logger(config)
-
-    # pipeline = get_pipeline(config)
-    # pipeline.run()
 
     launch(
         main,

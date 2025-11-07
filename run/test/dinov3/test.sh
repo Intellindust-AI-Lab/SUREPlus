@@ -6,7 +6,7 @@ NUM_WORKERS=4
 POSTPROCESSORS=("msp" "openmax" "mds" "gram" "react" "klm" "vim" "knn" "sirc_ml") 
 
 CHECKPOINTS=(
-    "/data1032/liyang/git/OpenOOD/Dinov3-L-ImageNet1k/CE/best.pth"
+    "./OpenOOD/Dinov3-L-ImageNet1k/CE/best.pth"
 )
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
