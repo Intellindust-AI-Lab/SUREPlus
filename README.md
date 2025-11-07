@@ -1,6 +1,3 @@
-
----
-
 # 🧠 From Misclassifications to Outliers — Joint Reliability Assessment in Classification
 
 **Official repository** for the paper
@@ -67,8 +64,6 @@ Example:
 --dinov3-repo /path/to/dinov3
 ```
 
-
----
 
 
 ---
