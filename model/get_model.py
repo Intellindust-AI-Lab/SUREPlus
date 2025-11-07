@@ -16,5 +16,7 @@ def get_model(model_name, nb_cls, logger, args):
         else:
             # Standard linear classifier
             net.head = torch.nn.Linear(1024, nb_cls).cuda()
+    
+    
 
     return net

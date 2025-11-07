@@ -1,0 +1,9 @@
+network:
+  name: dinov3_l
+  num_classes: '@{dataset.num_classes}'
+  image_size: '@{dataset.image_size}'
+  num_gpus: '@{num_gpus}'
+  checkpoint: ''
+  repo_path: '/data1032/liyang/git/dinov3'
+  weight_path: '/data/dinov3/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth'
+

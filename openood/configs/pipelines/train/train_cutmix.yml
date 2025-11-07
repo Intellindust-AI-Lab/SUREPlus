@@ -1,0 +1,34 @@
+exp_name: "'@{dataset.name}'_'@{network.name}'_'@{trainer.name}'_e'@{optimizer.num_epochs}'_lr'@{optimizer.lr}'_'@{mark}'/s'@{seed}'"
+output_dir: ./results/cutmix/
+save_output: True
+merge_option: default
+seed: 0
+
+mark: default
+num_gpus: 8
+num_workers: 16
+num_machines: 1
+machine_rank: 0
+
+pipeline:
+  name: train
+
+trainer:
+  name: cutmix
+  trainer_args:
+    beta: 1.0
+    cutmix_prob: 1.0   # cutmix probability
+
+evaluator:
+  name: base
+
+optimizer:
+  name: adamw
+  num_epochs: 20
+  lr: 0.00001
+  momentum: 0.9
+  weight_decay: 0.000005
+
+recorder:
+  name: base
+  save_all_models: False

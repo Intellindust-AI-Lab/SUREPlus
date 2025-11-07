@@ -1,0 +1,7 @@
+network:
+  name: deit_csc
+  num_classes: '@{dataset.num_classes}'
+  image_size: '@{dataset.image_size}'
+  num_gpus: '@{num_gpus}'
+  checkpoint: ''
+

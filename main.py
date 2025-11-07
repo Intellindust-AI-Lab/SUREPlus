@@ -10,12 +10,14 @@ import json
 import torch
 import torch.backends.cudnn
 import torch.utils.tensorboard
+import torch.nn as nn
 import torch.multiprocessing as mp
 import torch.distributed as dist
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim.swa_utils import AveragedModel
 import resource
+
 
 # Internal modules
 import train
@@ -28,6 +30,7 @@ import utils.option
 import utils.ema
 
 
+use_ddp = torch.distributed.is_initialized() and torch.distributed.get_world_size() > 1
 # ==============================
 # Utility Functions
 # ==============================
@@ -92,14 +95,16 @@ def main(proc_idx, args):
     # --------------------------
     # Dataset and Dataloader
     # --------------------------
-    train_loader, valid_loader, _, nb_cls = data.dataset.get_loaders(args.train_dir, 
-                                                                    args.val_dir,
-                                                                    args.test_dir, 
-                                                                    args.pixmix_path, 
-                                                                    args.data_name,
-                                                                    args.batch_size, 
-                                                                    num_workers=8,
-                                                                    model_name=args.model_name)
+    train_loader, valid_loader, _, nb_cls = data.dataset.get_loaders(
+        args.train_dir, 
+        args.val_dir,
+        args.test_dir, 
+        args.pixmix_path, 
+        args.data_name,
+        args.batch_size, 
+        num_workers=8,
+        model_name=args.model_name
+    )
 
     # ==========================
     # Multiple experiment runs
@@ -112,6 +117,8 @@ def main(proc_idx, args):
         # Model setup
         # --------------------------
         net = model.get_model.get_model(args.model_name, nb_cls, logger, args)
+        if use_ddp:
+            net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
         net = net.to(rank)
         net = DDP(net, device_ids=[rank], output_device=rank,
                   broadcast_buffers=False, find_unused_parameters=True)
@@ -138,9 +145,16 @@ def main(proc_idx, args):
 
             # Train one 
             train.train_epoch(
-                train_loader, net, net_ema, optimizer,
-                epoch, correct_log, logger, writer,
-                cos_scheduler, args
+                train_loader, 
+                net, 
+                net_ema, 
+                optimizer,
+                epoch, 
+                correct_log, 
+                logger, 
+                writer,
+                cos_scheduler, 
+                args
             )
             #  Learning rate scheduling
             if args.optim_name in ['swa', 'fmfp']:
@@ -177,7 +191,7 @@ def main(proc_idx, args):
                         logger.info(f"SWA Model Accuracy ↑ {best_acc:.2f} → {res_swa['Acc.']:.2f}")
                         best_acc = res_swa['Acc.']
                         best_aurc = res_swa.get('AURC', None)
-                        torch.save(swa_model.state_dict(), os.path.join(args.save_dir, f'best_acc_net_swa_{run_idx+1}.pth'))
+                        torch.save(swa_model.state_dict(), os.path.join(args.save_dir, f'best_{run_idx+1}.pth'))
 
                     report_dict = {'Acc.': best_acc, 'AURC': best_aurc}
 
@@ -195,7 +209,7 @@ def main(proc_idx, args):
                             logger.info(f"EMA Model Accuracy ↑ {best_acc_ema:.2f} → {res_ema['Acc.']:.2f}")
                             best_acc_ema = res_ema['Acc.']
                             best_aurc_ema = res_ema.get('AURC', None)
-                            torch.save(net_ema.ema.state_dict(), os.path.join(args.save_dir, f'best_acc_net_ema_{run_idx+1}.pth'))
+                            torch.save(net_ema.ema.state_dict(), os.path.join(args.save_dir, f'best_{run_idx+1}.pth'))
 
                         report_dict = {'Acc.': best_acc_ema, 'AURC': best_aurc_ema}
 
@@ -212,7 +226,7 @@ def main(proc_idx, args):
                             logger.info(f"Original Model Accuracy ↑ {best_acc:.2f} → {res_orig['Acc.']:.2f}")
                             best_acc = res_orig['Acc.']
                             best_aurc = res_orig.get('AURC', None)
-                            torch.save(net.state_dict(), os.path.join(args.save_dir, f'best_acc_net_orig_{run_idx+1}.pth'))
+                            torch.save(net.state_dict(), os.path.join(args.save_dir, f'best_{run_idx+1}.pth'))
 
                         report_dict = {'Acc.': best_acc, 'AURC': best_aurc}
 
