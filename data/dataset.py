@@ -48,9 +48,7 @@ def _build_transforms(dataset_name: str):
     if dataset_name == "cifar100":
         train_transform = T.Compose([
             T.RandomCrop(32, padding=4),
-            T.RandomHorizontalFlip(),
-            # T.ToTensor(),
-            # T.Normalize(mean, std)
+            T.RandomHorizontalFlip()
         ])
         test_transform = T.Compose([
             T.ToTensor(),
@@ -60,13 +58,12 @@ def _build_transforms(dataset_name: str):
             T.Resize(36),
             T.RandomCrop(32)
         ])
+        pixmix_utils.IMAGE_SIZE=32
     else:  # imagenet1k
         train_transform = T.Compose([
             T.Resize(256),
             T.RandomResizedCrop(224),
-            T.RandomHorizontalFlip(),
-            # T.ToTensor(),
-            # T.Normalize(mean, std)
+            T.RandomHorizontalFlip()
         ])
         test_transform = T.Compose([
             T.Resize(256),
@@ -78,6 +75,7 @@ def _build_transforms(dataset_name: str):
             T.Resize(256),
             T.RandomCrop(224)
         ])
+        pixmix_utils.IMAGE_SIZE=224
 
     return train_transform, test_transform, mixing_transform
 
