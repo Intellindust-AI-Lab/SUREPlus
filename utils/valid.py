@@ -1,45 +1,35 @@
+import numpy as np
 import torch
-import numpy as np 
 
-# Calc coverage, risk
-def coverage_risk(confidence, correctness):
-    risk_list = []
-    coverage_list = []
-    risk = 0
-    for i in range(len(confidence)):
-        coverage = (i + 1) / len(confidence)
-        coverage_list.append(coverage)
+# ----------------------------------------------------------------------
+# Calc AURC & EAURC (vectorized)
+# ----------------------------------------------------------------------
+def calc_aurc_eaurc(confidence, correctness):
+    """
+    confidence: shape (N,)   float
+    correctness: shape (N,)  0/1 values
+    """
 
-        if correctness[i] == 0:
-            risk += 1
+    # Sort by confidence descending
+    idx = np.argsort(-confidence)
+    sorted_correct = correctness[idx]
 
-        risk_list.append(risk / (i + 1))
+    # Coverage: 1..N / N
+    n = len(correctness)
+    coverage = (np.arange(1, n + 1) / n)
 
-    return risk_list, coverage_list
+    # Risk = (number of errors) / k
+    error = 1 - sorted_correct
+    cum_error = np.cumsum(error)
+    risk = cum_error / np.arange(1, n + 1)
 
-# Calc aurc, eaurc
-def aurc_eaurc(risk_list):
-    r = risk_list[-1]
-    risk_coverage_curve_area = 0
-    optimal_risk_area = r + (1 - r) * np.log(1 - r)
-    for risk_value in risk_list:
-        risk_coverage_curve_area += risk_value * (1 / len(risk_list))
+    # AURC = integral approx
+    aurc = np.mean(risk)
 
-    aurc = risk_coverage_curve_area
-    eaurc = risk_coverage_curve_area - optimal_risk_area
-
-    return aurc, eaurc
-
-# AURC, EAURC
-def calc_aurc_eaurc(softmax, correct):
-    softmax = np.array(softmax)
-    correctness = np.array(correct)
-    softmax_max = np.max(softmax, 1)
-
-    sort_values = sorted(zip(softmax_max[:], correctness[:]), key=lambda x:x[0], reverse=True)
-    sort_softmax_max, sort_correctness = zip(*sort_values)
-    risk_li, coverage_li = coverage_risk(sort_softmax_max, sort_correctness)
-    aurc, eaurc = aurc_eaurc(risk_li)
+    # Optimal risk area
+    final_risk = risk[-1]
+    optimal_risk_area = final_risk + (1 - final_risk) * np.log(1 - final_risk)
+    eaurc = aurc - optimal_risk_area
 
     return aurc, eaurc
 
@@ -47,38 +37,33 @@ def calc_aurc_eaurc(softmax, correct):
 def validation(loader, net):
     net.eval()
 
-    val_log = {'softmax': [], 'correct': [], 'pred': [], 'target': []}
+    val_log = {'conf': [], 'correct': []}
 
     for data in loader:
-        image, target = data[0].cuda(), data[1].cuda()
+        image = data[0].cuda(non_blocking=True)
+        target = data[1].cuda(non_blocking=True)
+
         output = net(image)
         softmax = torch.softmax(output, dim=1)
-        conf, pred_cls = softmax.max(1)  
+        conf, pred = softmax.max(1)  # conf: max softmax
 
-        correct = pred_cls.eq(target).float()
+        correct = pred.eq(target).float()
 
+        val_log['conf'].append(conf.cpu().numpy())
         val_log['correct'].append(correct.cpu().numpy())
-        val_log['softmax'].append(conf.cpu().numpy())  
-        val_log['pred'].append(pred_cls.cpu().numpy())
-        val_log['target'].append(target.cpu().numpy())
 
-    for key in val_log:
-        val_log[key] = np.concatenate(val_log[key])
+    # concat
+    conf = np.concatenate(val_log['conf'])
+    correct = np.concatenate(val_log['correct'])
 
-    acc = 100. * val_log['correct'].mean()
+    # accuracy
+    acc = correct.mean() * 100.0
 
-    aurc = calc_aurc_eaurc(
-        val_log['softmax'],  
-        val_log['correct']
-    )
+    # AURC & EAURC
+    aurc, eaurc = calc_aurc_eaurc(conf, correct)
 
-
-    # log
-    res = {
+    return {
         'Acc.': acc,
-        'AURC': aurc*1000,
+        'AURC': aurc * 1000,   
+        'EAURC': eaurc * 1000,
     }
-    
-
-    return res
-

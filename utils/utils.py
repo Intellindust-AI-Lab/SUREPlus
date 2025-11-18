@@ -75,16 +75,5 @@ def accuracy(output, target, topk=(1,)):
 
 
 
-def csv_writter(path, data_name, model_name, metrics, results):
-    with open(path, 'w', newline='',encoding='utf-8-sig') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow([data_name, model_name])
-
-        for method, res in [("MSP_results", results)]:
-            writer.writerow([method] + metrics)
-            values = ["{:.2f}±{:.2f}".format(res[metric]["mean"], res[metric]["std"]) for metric in metrics]
-            writer.writerow([''] + values)
-
-
 
 
