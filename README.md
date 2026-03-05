@@ -1,10 +1,9 @@
 <div align="center">
 
-#  From Misclassifications to Outliers : Joint Reliability Assessment in Classification
-##
+# From Misclassifications to Outliers: Joint Reliability Assessment in Classification
 
 [![arXiv](https://img.shields.io/badge/arXiv-2603.03903-b31b1b.svg)](https://arxiv.org/abs/2603.03903)
-[![Project Page](https://img.shields.io/badge/Project-Page-blue)](https://your-project-page.github.io)
+[![Project Page](https://img.shields.io/badge/Project-Page-blue)](https://liyangggggg.github.io/SUREPlus_project/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-orange)](https://pytorch.org/)
@@ -13,13 +12,14 @@
 
 Official PyTorch implementation of the paper **"From Misclassifications to Outliers: Joint Reliability Assessment in Classification"**.
 
-
 ---
 
 ## 📋 Table of Contents
 
 - [Overview](#-overview)
-- [Updates](#-updates)
+- [Motivation](#-motivation-the-limitations-of-single-score)
+- [Double Scoring Metrics](#-double-scoring-metrics)
+- [SURE+ Training Strategy](#-sure-training-strategy)
 - [Installation](#-installation)
 - [Data Preparation](#-data-preparation)
 - [Pretrained Models](#-pretrained-models)
@@ -42,15 +42,63 @@ Existing approaches typically treat **misclassification detection** and **OOD de
 
 The framework is compatible with **ResNet-18** and **DINOv3 (ViT-L/16)** and integrates with **[OpenOOD](https://github.com/Jingkang50/OpenOOD)** for standardized benchmarking.
 
+---
 
+## 🔍 Motivation: The Limitations of Single Score
 
+Existing approaches typically treat **misclassification detection** and **out-of-distribution (OOD) detection** as separate problems. They optimize for either ID accuracy or OOD detection, but not both jointly. This leads to:
+- Poor trade-offs between classification accuracy and reliability
+- Incomplete evaluation of model reliability
+- Suboptimal performance in real-world deployment scenarios
+
+<p align="center">
+  <img src="figs/CE_vs_CutMix.png" width="60%" />
+  
+</p>
+
+ Comparison between Cross-Entropy (CE) and CutMix training strategies across multiple metrics. While CutMix improves OOD detection (OOD AUROC), it shows lower performance in joint reliability assessment (DS-F1) compared to CE.
+<p align="center">
+  <img src="figs/CE_vs_CutMix_F1_surface.png" width="45%" />
+</p>
+3D visualization of DS-F1 scores as a function of ID threshold (τ_ID) and OOD threshold (τ_OOD). The surface shows that CE achieves a higher maximum DS-F1 score (0.565) compared to CutMix (0.539).
 
 ---
 
-## 📢 Updates
+## 📊 Double Scoring Metrics
 
-- **[2026-03-05]** Paper released on arXiv
-- **[2025-12-26]** Code and pretrained models released
+We propose **Double Scoring (DS) metrics** — including **DS-F1** and **DS-AURC** — that simultaneously evaluate a model's ability to identify misclassifications and detect OOD samples within a unified framework.
+
+### DS-F1 (Double Scoring F1 Score)
+
+DS-F1 extends the traditional F1 score to jointly consider both misclassification detection and OOD detection:
+
+<p align="center">
+  <img src="figs/DS-F1.png" width="60%" />
+</p>
+
+
+### DS-AURC (Double Scoring Area Under Risk-Coverage Curve)
+
+DS-AURC extends the selective classification risk-coverage framework to incorporate OOD detection:
+
+<p align="center">
+  <img src="figs/DS-AURC.png" width="50%" />
+</p>
+
+More details see paper.
+
+---
+
+## 🚀 SURE+ Training Strategy
+
+We propose **SURE+**, a comprehensive training strategy that combines four key components to achieve state-of-the-art reliability performance:
+
+| Component | Description |
+|-----------|-------------|
+| **RegMixup** | Regularized mixup augmentation for improved calibration and robustness |
+| **RegPixMix** | Regularized pixel-level mixup that preserves semantic information |
+| **F-SAM** | Fisher information guided Sharpness-Aware Minimization |
+| **EMA (ReBN)** | Exponential Moving Average with Re-Batch Normalization |
 
 ---
 
@@ -84,8 +132,6 @@ pip install torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorc
 
 ## 📁 Data Preparation
 
-
-
 For instructions on downloading and preparing the dataset, please refer to the official guide from **[OpenOOD](https://github.com/Jingkang50/OpenOOD)**.
 
 ### PixMix Dataset
@@ -108,14 +154,11 @@ Organize your datasets in ImageFolder format:
     └── ...
 ```
 
-
-
 ---
 
 ## 🔥 Pretrained Models
 
 We provide [pretrained checkpoints](https://drive.google.com/drive/folders/17GZPbCy9jeh6gClaztYPJzPSKEu5XZHn?dmr=1&ec=wgc-drive-%5Bmodule%5D-goto) for SURE+
-
 
 ### DINOv3 Setup
 
@@ -183,6 +226,7 @@ Or use the provided script:
 ```bash
 bash run/train/dinov3/SURE+.sh
 ```
+
 ---
 
 ## 📊 Evaluation
@@ -197,7 +241,6 @@ Testing scripts are in `run/test/` and are fully compatible with **OpenOOD**.
 ### Supported Post-processors
 
 Post-processors follow the implementations in **[OpenOOD](https://github.com/Jingkang50/OpenOOD)**. In addition, this repository includes the **SIRC** post-processor. By default, MSP is used as the ID confidence score.
-
 
 ### Quick Evaluation
 
@@ -237,23 +280,20 @@ For CSC models, use the appropriate network config:
 
 ## 🏆 Results
 
-### ResNet-18 on CIFAR-100 and its Near/Far-OOD datasets
+### ResNet-18 on CIFAR-100
 
-| Method | Acc ↑ | DS-F1 ↑ | DS-AURC ↓ |
-|--------|-------|----------|---------|
-| Cross-Entropy | 77.32 | 67.42 / 57.03 | 202.38 / 367.56 |
-| SURE | 80.55 | 68.07 / 53.09 | 199.05 / 393.25 | 
-| **SURE+ (Ours)** | **81.66** | **70.67 / 61.35** | **173.45 / 314.04** | **88.3** |
+<p align="center">
+  <img src="figs/r18_cifar100.png" width="90%" />
+</p>
 
-### DINOv3 ViT-L/16 on ImageNet-1K and its Near/Far-OOD datasets
+### DINOv3 on ImageNet-1K
 
-| Method | Acc ↑ | DS-F1 ↑ | DS-AURC ↓ |
-|--------|-------|----------|---------|
-| Cross-Entropy | 86.89 | 75.42 / 84.38 | 168.33 / 48.07 |
-| SURE | 87.94 | 76.62 / 85.44 | 157.07 / 42.13 | 
-| **SURE+ (Ours)** | **88.49** | **77.10 / 86.15** | **156.00 / 38.07** |
+<p align="center">
+  <img src="figs/dinov3_imagenet1k.png" width="90%" />
+</p>
 
-*Full results available in the [paper](https://arxiv.org/abs/2501.xxxxx).*
+
+*More results available in the [paper](https://arxiv.org/abs/2603.03903).*
 
 ---
 
@@ -296,7 +336,7 @@ If you find this work useful, please consider citing:
 ```bibtex
 @article{li2026from,
   title={From Misclassifications to Outliers: Joint Reliability Assessment in Classification},
-  author={Li, Yang and Sha, Youyang and Wang, Yinzhi and Timothy Hospedales and  Shell, Xu Hu and Shen, Xi and Yu, Xuanlong},
+  author={Li, Yang and Sha, Youyang and Wang, Yinzhi and Hospedales, Timothy and Hu, Shell Xu and Shen, Xi and Yu, Xuanlong},
   journal={arXiv preprint arXiv:2603.03903},
   year={2026}
 }
