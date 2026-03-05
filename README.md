@@ -299,7 +299,7 @@ If you find this work useful, please consider citing:
 @article{li2026from,
   title={From Misclassifications to Outliers: Joint Reliability Assessment in Classification},
   author={Li, Yang and Sha, Youyang and Wang, Yinzhi and Timothy Hospedales and  Shell, Xu Hu and Shen, Xi and Yu, Xuanlong},
-  journal={arXiv preprint arXiv:2603.xxxxx},
+  journal={arXiv preprint arXiv:2603.03903},
   year={2026}
 }
 ```
@@ -320,12 +320,6 @@ This work builds upon the following excellent open-source projects:
 - **[DINOv3](https://github.com/facebookresearch/dinov3)** - Self-supervised vision transformer
 
 We thank the authors for sharing their high-quality code and pretrained models.
-
----
-
-## 📮 Contact
-
-For questions or feedback, please open an [issue](https://github.com/yourusername/SURE-plus/issues) or contact the authors.
 
 ---
 
