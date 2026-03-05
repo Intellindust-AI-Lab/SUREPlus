@@ -15,7 +15,7 @@ dataset:
 
   train:
     dataset_class: ImglistDataset
-    data_dir: /data6022/
+    data_dir: /data/openood/openood/images_largescale/
     imglist_pth: /data/openood/openood/benchmark_imglist/imagenet/train_imagenet.txt
     batch_size: 16
     shuffle: True

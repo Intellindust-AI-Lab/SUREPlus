@@ -110,14 +110,12 @@ def pixmix_mixing(orig, mixing_img, preprocess):
 
     # choose number of mixing iterations (1..4)
     for _ in range(np.random.randint(1, 4 + 1)):
-
         if random.random() < 0.5:
             partner = tensorize(_augment_input(orig)) 
         else:
             partner = tensorize(mixing_img)
 
-
-    mixing_op = random.choice(mixings)
+        mixing_op = random.choice(mixings)
     mixed = mixing_op(mixed, partner, 3)
     mixed = torch.clip(mixed, 0, 1)
     return normalize(mixed)

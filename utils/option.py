@@ -59,7 +59,7 @@ def get_args_parser():
     # --- PixMix augmentation ---
     parser.add_argument('--pixmix-weight', default=0.0, type=float,
                         help='Loss weight for PixMix augmentation term.')
-    parser.add_argument('--pixmix-path', default='/data6022/PixMixSet/fractals_and_fvis/first_layers_resized256_onevis/',
+    parser.add_argument('--pixmix-path', default='./data/PixMixSet/fractals_and_fvis/first_layers_resized256_onevis/',
                         type=str,
                         help='Path to the PixMix mixing image dataset (e.g., fractals, feature visualizations).')
 
@@ -86,9 +86,9 @@ def get_args_parser():
                         help='Temperature scaling factor for cosine classifier.')
 
     # --- DINOv3 settings ---
-    parser.add_argument('--dinov3-repo', default='/data1032/liyang/git/dinov3', type=str,
+    parser.add_argument('--dinov3-repo', default='./third_party/dinov3', type=str,
                         help='Path to the official DINOv3 repository.')
-    parser.add_argument('--dinov3-path', default='/data9022/dinov3/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth', type=str,
+    parser.add_argument('--dinov3-path', default='./checkpoints/dinov3_vitl16_pretrain.pth', type=str,
                         help='Path to pretrained DINOv3 weights.')
 
     # ============================================================
@@ -104,7 +104,7 @@ def get_args_parser():
     # ============================================================
     # 🧩 Hardware Configuration
     # ============================================================
-    parser.add_argument('--gpu', default=[2, 3, 4, 5], type=int, nargs='+',
+    parser.add_argument('--gpu', default=[0], type=int, nargs='+',
                         help='List of GPU device IDs to use for training.')
     parser.add_argument('--nb-worker', default=4, type=int,
                         help='Number of dataloader worker threads.')
@@ -121,9 +121,9 @@ def get_args_parser():
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                     help="Configuration for CIFAR-100 dataset.")
     Cifar100.add_argument('--data-name', default='cifar100', type=str, help='Dataset name (used for logging and configs).')
-    Cifar100.add_argument("--train-dir", default='/data9022/openood/ours/cifar100/train', type=str, help="Directory containing CIFAR-100 training images.")
-    Cifar100.add_argument("--val-dir", default='/data9022/openood/ours/cifar100/val', type=str,  help="Directory containing CIFAR-100 validation images.")
-    Cifar100.add_argument("--test-dir", default='/data9022/openood/ours/cifar100/test', type=str, help="Directory containing CIFAR-100 test images.")
+    Cifar100.add_argument("--train-dir", default='./data/cifar100/train', type=str, help="Directory containing CIFAR-100 training images.")
+    Cifar100.add_argument("--val-dir", default='./data/cifar100/val', type=str,  help="Directory containing CIFAR-100 validation images.")
+    Cifar100.add_argument("--test-dir", default='./data/cifar100/test', type=str, help="Directory containing CIFAR-100 test images.")
     Cifar100.add_argument("--nb-cls", default=100, type=int, help="Number of classes in CIFAR-100.")
     Cifar100.add_argument("--imb-factor", default=1.0, type=float, help="Imbalance factor for simulating long-tailed distribution.")
 
@@ -134,9 +134,9 @@ def get_args_parser():
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                     help="Configuration for ImageNet-1K dataset.")
     ImgNet1k.add_argument('--data-name', default='imagenet1k', type=str, help='Dataset name (used for logging and configs).')
-    ImgNet1k.add_argument("--train-dir", default='/data6022/Inet1K/train', type=str, help="Directory containing ImageNet-1K training images.")
-    ImgNet1k.add_argument("--val-dir", default='/data6022/Inet1K/val', type=str, help="Directory containing ImageNet-1K validation images.")
-    ImgNet1k.add_argument("--test-dir", default='/data6022/Inet1K/val', type=str, help="Directory containing ImageNet-1K test images.")
+    ImgNet1k.add_argument("--train-dir", default='./data/imagenet/train', type=str, help="Directory containing ImageNet-1K training images.")
+    ImgNet1k.add_argument("--val-dir", default='./data/imagenet/val', type=str, help="Directory containing ImageNet-1K validation images.")
+    ImgNet1k.add_argument("--test-dir", default='./data/imagenet/val', type=str, help="Directory containing ImageNet-1K test images.")
     ImgNet1k.add_argument("--nb-cls", default=1000, type=int, help="Number of classes in ImageNet-1K.")
     ImgNet1k.add_argument("--imb-factor", default=1.0, type=float, help="Imbalance factor for simulating long-tailed distribution.")
 

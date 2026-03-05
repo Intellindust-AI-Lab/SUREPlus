@@ -15,19 +15,19 @@ dataset:
 
   train:
     dataset_class: ImglistAugMixDataset
-    data_dir: /data6022/
-    imglist_pth: /data9022/openood/openood/benchmark_imglist/imagenet/train_imagenet_new.txt
+    data_dir: /data/openood/openood/images_largescale/
+    imglist_pth: /data/openood/openood/benchmark_imglist/imagenet/train_imagenet_new.txt
     batch_size: 16
     shuffle: True
   val:
     dataset_class: ImglistDataset
-    data_dir: /data9022/openood/openood/images_largescale/
-    imglist_pth: /data9022/openood/openood/benchmark_imglist/imagenet/val_imagenet.txt
+    data_dir: /data/openood/openood/images_largescale/
+    imglist_pth: /data/openood/openood/benchmark_imglist/imagenet/val_imagenet.txt
     batch_size: 32
     shuffle: False
   test:
     dataset_class: ImglistDataset
-    data_dir: /data9022/openood/openood/images_largescale/
-    imglist_pth: /data9022/openood/openood/benchmark_imglist/imagenet/test_imagenet.txt
+    data_dir: /data/openood/openood/images_largescale/
+    imglist_pth: /data/openood/openood/benchmark_imglist/imagenet/test_imagenet.txt
     batch_size: 32
     shuffle: False

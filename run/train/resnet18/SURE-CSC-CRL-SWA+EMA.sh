@@ -1,5 +1,5 @@
 python3 main.py \
---gpu 0 \
+--gpu 9 \
 --nb-run 3 \
 --lr 0.05  \
 --weight-decay 0.0005 \
@@ -8,8 +8,7 @@ python3 main.py \
 --model-name resnet18 \
 --optim-name sam \
 --regmixup-weight 1.0 \
---rebn \
---save-dir ./ResNet18-Cifar100/SURE-CSC-CRL-SWA+EMA \
+--save-dir ./ResNet18-Cifar100/SURE-CSC-CRL-SWA+EMA-ReBN \
 Cifar100
 
 

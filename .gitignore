@@ -1,0 +1,98 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyTorch
+*.pth
+*.pt
+*.ckpt
+checkpoints/
+
+# Tensorboard
+runs/
+events.out.tfevents.*
+
+# Weights & Biases
+wandb/
+
+# Data
+data/
+datasets/
+*.csv
+*.tsv
+
+# Logs
+logs/
+*.log
+
+# Output
+output/
+results/
+exp/
+experiments/
+
+# PixMix
+PixMixSet/
+fractals_and_fvis/
+
+# DINOv3
+dinov3/
+*.pth.tar
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Model zoo
+model_zoo/
+pretrained/
+
+# Environment
+.env
+.env.local
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json

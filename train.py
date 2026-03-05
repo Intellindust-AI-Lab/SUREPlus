@@ -1,9 +1,16 @@
-import utils.utils
-import torch.nn as nn
-import torch
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Training utilities and loss functions.
+"""
+
 import numpy as np
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.batchnorm import _BatchNorm
+
+import utils.utils
 
 
 class RegMixup_Criterion(nn.Module):

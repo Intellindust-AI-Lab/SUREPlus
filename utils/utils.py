@@ -2,11 +2,9 @@ import os
 import sys
 import logging
 import csv
-import numpy as np
 import random
 import numpy as np
 import torch
-import os
     
     
 def fix_seed(seed=42):

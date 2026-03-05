@@ -28,9 +28,6 @@ import utils.utils
 import utils.valid as valid
 import utils.option
 import utils.ema
-
-
-use_ddp = torch.distributed.is_initialized() and torch.distributed.get_world_size() > 1
 # ==============================
 # Utility Functions
 # ==============================
@@ -117,6 +114,7 @@ def main(proc_idx, args):
         # Model setup
         # --------------------------
         net = model.get_model.get_model(args.model_name, nb_cls, logger, args)
+        use_ddp = torch.distributed.is_initialized() and torch.distributed.get_world_size() > 1
         if use_ddp:
             net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
         net = net.to(rank)
@@ -167,7 +165,8 @@ def main(proc_idx, args):
                 cos_scheduler.step()
 
             # Step 4: EMA update for batchnorm
-            net_ema.update_bn(train_loader, device='cuda')
+            ##FIXME 
+            # net_ema.update_bn(train_loader, device='cuda')
 
             # --------------------------
             # Validation phase
