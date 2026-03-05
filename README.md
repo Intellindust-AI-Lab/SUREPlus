@@ -66,8 +66,8 @@ The framework is compatible with **ResNet-18** and **DINOv3 (ViT-L/16)** and int
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/SURE-plus.git
-cd SURE-plus
+git clone https://github.com/Intellindust-AI-Lab/SUREPlus.git
+cd SUREPlus
 
 # Create virtual environment
 conda create -n sure_plus python=3.10
@@ -196,13 +196,8 @@ Testing scripts are in `run/test/` and are fully compatible with **OpenOOD**.
 
 ### Supported Post-processors
 
-- `msp` - Maximum Softmax Probability
-- `odin` - ODIN
-- `energy` - Energy Score
-- `gradnorm` - Gradient Norm
-- `knn` - k-Nearest Neighbors
-- `vim` - Virtual-logit Matching
-- And more...
+Post-processors follow the implementations in **[OpenOOD](https://github.com/Jingkang50/OpenOOD)**. In addition, this repository includes the **SIRC** post-processor. By default, MSP is used as the ID confidence score.
+
 
 ### Quick Evaluation
 
