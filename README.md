@@ -34,12 +34,15 @@ Official PyTorch implementation of the paper **"From Misclassifications to Outli
 
 ## 🎯 Overview
 
-Existing approaches treat misclassification detection and OOD detection as separate problems. We propose a unified reliability assessment framework that:
+Existing approaches typically treat **misclassification detection** and **OOD detection** as separate problems. This repository provides a **unified framework** for reliability assessment that:
 
-- **Jointly optimizes** for both confidence calibration and OOD detection
-- **Supports multiple backbones**: ResNet-18 and DINOv3 ViT-L/16
-- **Integrates seamlessly** with OpenOOD for comprehensive evaluation
-- **Achieves state-of-the-art** results on CIFAR-100 and ImageNet-1K
+* **Jointly addresses selective risk and OOD detection** within a single pipeline
+* **Supports both training and evaluation**
+* **Implements our proposed DS Metrics** for reliability analysis
+
+The framework is compatible with **ResNet-18** and **DINOv3 (ViT-L/16)** and integrates with **[OpenOOD](https://github.com/Jingkang50/OpenOOD)** for standardized benchmarking.
+
+
 
 
 ---
