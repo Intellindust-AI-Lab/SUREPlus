@@ -98,7 +98,7 @@ We propose **SURE+**, a comprehensive training strategy that combines four key c
 | **RegMixup** | Regularized mixup augmentation for improved calibration and robustness |
 | **RegPixMix** | Regularized pixel-level mixup that preserves semantic information |
 | **F-SAM** | Fisher information guided Sharpness-Aware Minimization |
-| **EMA (ReBN)** | Exponential Moving Average with Re-Batch Normalization |
+| **EMA (ReBN)** | Exponential Moving Average with Re-normalized Batch Normalization |
 
 ---
 
